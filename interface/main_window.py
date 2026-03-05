@@ -94,7 +94,10 @@ class MainWindow(QMainWindow):
         self._plot = AnglePlotWidget(window_seconds=10.0)
         root.addWidget(self._plot, stretch=1)
 
-        root.addWidget(self._build_control_panel())
+        ctrl_row = QHBoxLayout()
+        ctrl_row.addWidget(self._build_control_panel())
+        ctrl_row.addStretch()
+        root.addLayout(ctrl_row)
 
         self._status_bar = QStatusBar()
         self.setStatusBar(self._status_bar)
