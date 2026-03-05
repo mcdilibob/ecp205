@@ -107,7 +107,7 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(QLabel("Port:"))
         self._port_combo = QComboBox()
-        self._port_combo.setEditable(True)
+        self._port_combo.setEditable(False)
         self._port_combo.setMinimumWidth(160)
         self._refresh_ports()
         layout.addWidget(self._port_combo)
@@ -211,10 +211,18 @@ class MainWindow(QMainWindow):
         sb.setFixedWidth(80)
         return sb
 
+    _DEFAULT_PORT = "/dev/ttyACM0"
+
     def _refresh_ports(self) -> None:
         self._port_combo.clear()
-        for p in serial.tools.list_ports.comports():
-            self._port_combo.addItem(p.device)
+        ports = [p.device for p in serial.tools.list_ports.comports()]
+        if self._DEFAULT_PORT not in ports:
+            ports.insert(0, self._DEFAULT_PORT)
+        for dev in ports:
+            self._port_combo.addItem(dev)
+        idx = self._port_combo.findText(self._DEFAULT_PORT)
+        if idx >= 0:
+            self._port_combo.setCurrentIndex(idx)
 
     def _set_controls_enabled(self, enabled: bool) -> None:
         for w in (
