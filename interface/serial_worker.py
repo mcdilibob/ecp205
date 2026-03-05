@@ -15,7 +15,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 class SerialWorker(QThread):
     # Emitted for every valid DATA frame:
-    #   (t_ms, angle1_deg, angle2_deg, angle3_deg, vq_V)
+    #   (t_ms, angle1_rad, angle2_rad, angle3_rad, vq_V)
     data_received = pyqtSignal(float, float, float, float, float)
 
     # Emitted when an ERR: frame arrives or a serial exception occurs

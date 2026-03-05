@@ -13,7 +13,7 @@
 //         AS5600 DIR  pin → GND  (clockwise = increasing angle)
 //
 // Gain GAIN_ONE: ±4.096 V range, 0.125 mV per LSB.
-// At 5 V supply the AS5600 output spans 0–5 V → 0–4096 LSB → 0–360°.
+// At 5 V supply the AS5600 output spans 0–5 V → 0–2π rad.
 // If AS5600 is powered from 3.3 V, update AS5600_VCC in config.h.
 // =============================================================================
 
@@ -45,7 +45,7 @@ public:
         return true;
     }
 
-    // Returns angle in degrees [0.0, 360.0) with calibration and inversion applied
+    // Returns angle in radians [0.0, 2π) with calibration and inversion applied
     // channel: ADS_CH_DISK1 / ADS_CH_DISK2 / ADS_CH_DISK3
     float readAngle(uint8_t channel) {
         float angle = _readAngleRaw(channel);
@@ -55,17 +55,17 @@ public:
 
         // Apply direction inversion if configured
         if (_invert[channel]) {
-            angle = 360.0f - angle;
+            angle = TWO_PI - angle;
         }
 
-        // Wrap to [0, 360)
-        while (angle < 0.0f)     angle += 360.0f;
-        while (angle >= 360.0f)  angle -= 360.0f;
+        // Wrap to [0, 2π)
+        while (angle < 0.0f)    angle += TWO_PI;
+        while (angle >= TWO_PI) angle -= TWO_PI;
 
         return angle;
     }
 
-    // Read all three disks in one call; results written to a1/a2/a3 (degrees)
+    // Read all three disks in one call; results written to a1/a2/a3 (radians)
     void readAll(float &a1, float &a2, float &a3) {
         a1 = readAngle(ADS_CH_DISK1);
         a2 = readAngle(ADS_CH_DISK2);
@@ -77,14 +77,14 @@ private:
     float _offsets[3] = {0.0f, 0.0f, 0.0f};
     bool  _invert[3]  = {false, false, false};
 
-    // Read raw angle without calibration or inversion
+    // Read raw angle in radians without calibration or inversion
     float _readAngleRaw(uint8_t channel) {
         int16_t raw = _ads.readADC_SingleEnded(channel);
         if (raw < 0) raw = 0;
         float volts = _ads.computeVolts(raw);
-        float angle = (volts / AS5600_VCC) * 360.0f;
-        if (angle < 0.0f)   angle = 0.0f;
-        if (angle > 360.0f) angle = 360.0f;
+        float angle = (volts / AS5600_VCC) * TWO_PI;
+        if (angle < 0.0f)    angle = 0.0f;
+        if (angle > TWO_PI)  angle = TWO_PI;
         return angle;
     }
 };

@@ -6,9 +6,9 @@ CSV export via pandas.
 
 Fields per sample:
     t_ms  : uint32  timestamp in milliseconds (from MCU)
-    a1    : float32 disk 1 angle (degrees)
-    a2    : float32 disk 2 angle (degrees)
-    a3    : float32 disk 3 angle (degrees)
+    a1    : float32 disk 1 angle (radians)
+    a2    : float32 disk 2 angle (radians)
+    a3    : float32 disk 3 angle (radians)
     vq    : float32 motor voltage command (V)
 """
 
@@ -22,7 +22,7 @@ import pandas as pd
 
 
 class DataBuffer:
-    COLUMNS = ("t_ms", "angle_disk1_deg", "angle_disk2_deg", "angle_disk3_deg", "vq_V")
+    COLUMNS = ("t_ms", "angle_disk1_rad", "angle_disk2_rad", "angle_disk3_rad", "vq_V")
 
     def __init__(self, max_seconds: float = 60.0, sample_rate_hz: float = 200.0) -> None:
         max_len = int(max_seconds * sample_rate_hz)
