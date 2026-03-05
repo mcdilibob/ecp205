@@ -32,6 +32,8 @@ class AnglePlotWidget(pg.PlotWidget):
         self.setClipToView(True)
         # Even grid: major lines every 45°, minor every 15°
         self.getAxis("left").setTickSpacing(major=45, minor=15)
+        # Right padding
+        self.getPlotItem().layout.setContentsMargins(0, 0, 16, 0)
 
         # One curve per disk
         self._curves: list[pg.PlotDataItem] = []
