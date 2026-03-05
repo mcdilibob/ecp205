@@ -131,6 +131,15 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._btn_disconnect)
 
         layout.addStretch()
+
+        self._btn_export = QPushButton("Export CSV")
+        self._btn_export.clicked.connect(self._on_export)
+        layout.addWidget(self._btn_export)
+
+        self._btn_clear = QPushButton("Clear Buffer")
+        self._btn_clear.clicked.connect(self._on_clear)
+        layout.addWidget(self._btn_clear)
+
         return box
 
     def _build_control_panel(self) -> QGroupBox:
@@ -168,16 +177,6 @@ class MainWindow(QMainWindow):
         self._btn_stop.clicked.connect(self._on_stop)
         btn_row.addWidget(self._btn_stop)
 
-        btn_row.addStretch()
-
-        self._btn_export = QPushButton("Export CSV")
-        self._btn_export.clicked.connect(self._on_export)
-        btn_row.addWidget(self._btn_export)
-
-        self._btn_clear = QPushButton("Clear Buffer")
-        self._btn_clear.clicked.connect(self._on_clear)
-        btn_row.addWidget(self._btn_clear)
-
         outer.addLayout(btn_row)
         return box
 
@@ -212,7 +211,6 @@ class MainWindow(QMainWindow):
         for w in (
             self._btn_start, self._btn_stop,
             self._amp_spin, self._freq_spin,
-            self._btn_export, self._btn_clear,
         ):
             w.setEnabled(enabled)
 
