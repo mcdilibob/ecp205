@@ -7,9 +7,8 @@ Layout:
   ├─ plot ────────────────────────────────────────────────────────────┤
   │                  Real-time angle plot (3 disks + Vq)              │
   ├─ controls ────────────────────────────────────────────────────────┤
-  │  Amplitude (V): [slider ──●──]  [spinbox]                         │
-  │  Frequency (Hz): [slider ──●──]  [spinbox]                        │
-  │  [START]   [STOP]   [Export CSV]                                  │
+  │  Amplitude (V):  [spinbox]   Frequency (Hz): [spinbox]            │
+  │  [START]   [STOP]   [Export CSV]   [Clear Buffer]                 │
   └───────────────────────────────────────────────────────────────────┘
 """
 
@@ -19,18 +18,18 @@ from pathlib import Path
 
 import numpy as np
 import serial.tools.list_ports
-from PyQt6.QtCore import Qt, QTimer, pyqtSlot
+from PyQt6.QtCore import QTimer, pyqtSlot
 from PyQt6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QSlider,
     QStatusBar,
     QVBoxLayout,
     QWidget,
@@ -58,13 +57,13 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("ECP205 — Frequency Response Tool")
-        self.resize(1000, 650)
+        self.resize(1000, 620)
 
         self._worker = SerialWorker(self)
         self._buffer = DataBuffer(max_seconds=60.0, sample_rate_hz=200.0)
         self._connected = False
 
-        # Debounce timer: sends AMP/FREQ command 200 ms after last slider move
+        # Debounce: send AMP/FREQ command 200 ms after last spinbox change
         self._cmd_timer = QTimer(self)
         self._cmd_timer.setSingleShot(True)
         self._cmd_timer.setInterval(200)
@@ -136,36 +135,29 @@ class MainWindow(QMainWindow):
 
     def _build_control_panel(self) -> QGroupBox:
         box = QGroupBox("Motor Control")
-        grid = QVBoxLayout(box)
+        outer = QVBoxLayout(box)
 
-        # Amplitude row
-        amp_row = QHBoxLayout()
-        amp_row.addWidget(QLabel("Amplitude (V):"))
-        self._amp_slider = self._make_slider(
-            self.AMP_MIN, self.AMP_MAX, self.AMP_STEP, initial=1.0
-        )
-        amp_row.addWidget(self._amp_slider, stretch=1)
+        # Input grid: labels in col 0, spinboxes in col 1
+        grid = QGridLayout()
+        grid.setColumnStretch(1, 0)
+        grid.setHorizontalSpacing(8)
+
         self._amp_spin = self._make_spinbox(
             self.AMP_MIN, self.AMP_MAX, self.AMP_STEP, initial=1.0
         )
-        amp_row.addWidget(self._amp_spin)
-        grid.addLayout(amp_row)
-
-        # Frequency row
-        freq_row = QHBoxLayout()
-        freq_row.addWidget(QLabel("Frequency (Hz):"))
-        self._freq_slider = self._make_slider(
-            self.FREQ_MIN, self.FREQ_MAX, self.FREQ_STEP, initial=1.0
-        )
-        freq_row.addWidget(self._freq_slider, stretch=1)
         self._freq_spin = self._make_spinbox(
             self.FREQ_MIN, self.FREQ_MAX, self.FREQ_STEP, initial=1.0
         )
-        freq_row.addWidget(self._freq_spin)
-        grid.addLayout(freq_row)
+
+        grid.addWidget(QLabel("Amplitude (V):"),  0, 0)
+        grid.addWidget(self._amp_spin,             0, 1)
+        grid.addWidget(QLabel("Frequency (Hz):"), 1, 0)
+        grid.addWidget(self._freq_spin,            1, 1)
+        outer.addLayout(grid)
 
         # Buttons row
         btn_row = QHBoxLayout()
+
         self._btn_start = QPushButton("START")
         self._btn_start.setStyleSheet("background:#2a7a2a; color:white; font-weight:bold;")
         self._btn_start.clicked.connect(self._on_start)
@@ -186,20 +178,12 @@ class MainWindow(QMainWindow):
         self._btn_clear.clicked.connect(self._on_clear)
         btn_row.addWidget(self._btn_clear)
 
-        grid.addLayout(btn_row)
+        outer.addLayout(btn_row)
         return box
 
     # -------------------------------------------------------------------------
     # Helpers
     # -------------------------------------------------------------------------
-
-    @staticmethod
-    def _make_slider(lo: float, hi: float, step: float, initial: float) -> QSlider:
-        steps = round((hi - lo) / step)
-        s = QSlider(Qt.Orientation.Horizontal)
-        s.setRange(0, steps)
-        s.setValue(round((initial - lo) / step))
-        return s
 
     @staticmethod
     def _make_spinbox(lo: float, hi: float, step: float, initial: float) -> QDoubleSpinBox:
@@ -208,7 +192,7 @@ class MainWindow(QMainWindow):
         sb.setSingleStep(step)
         sb.setDecimals(2)
         sb.setValue(initial)
-        sb.setFixedWidth(80)
+        sb.setFixedWidth(90)
         return sb
 
     _DEFAULT_PORT = "/dev/ttyACM0"
@@ -227,34 +211,23 @@ class MainWindow(QMainWindow):
     def _set_controls_enabled(self, enabled: bool) -> None:
         for w in (
             self._btn_start, self._btn_stop,
-            self._amp_slider, self._amp_spin,
-            self._freq_slider, self._freq_spin,
+            self._amp_spin, self._freq_spin,
             self._btn_export, self._btn_clear,
         ):
             w.setEnabled(enabled)
-
-    def _amplitude(self) -> float:
-        return self.AMP_MIN + self._amp_slider.value() * self.AMP_STEP
-
-    def _frequency(self) -> float:
-        return self.FREQ_MIN + self._freq_slider.value() * self.FREQ_STEP
 
     # -------------------------------------------------------------------------
     # Signal wiring
     # -------------------------------------------------------------------------
 
     def _connect_signals(self) -> None:
-        # Serial worker
         self._worker.data_received.connect(self._on_data)
         self._worker.error_occurred.connect(self._on_error)
         self._worker.connected.connect(self._on_connected)
         self._worker.disconnected.connect(self._on_disconnected)
 
-        # Sliders ↔ spinboxes (keep in sync, debounce command)
-        self._amp_slider.valueChanged.connect(self._on_amp_slider)
-        self._amp_spin.valueChanged.connect(self._on_amp_spin)
-        self._freq_slider.valueChanged.connect(self._on_freq_slider)
-        self._freq_spin.valueChanged.connect(self._on_freq_spin)
+        self._amp_spin.valueChanged.connect(lambda _: self._cmd_timer.start())
+        self._freq_spin.valueChanged.connect(lambda _: self._cmd_timer.start())
 
     # -------------------------------------------------------------------------
     # Slots
@@ -336,38 +309,8 @@ class MainWindow(QMainWindow):
         self._buffer.clear()
         self._plot.clear_data()
 
-    # --- Slider / spinbox sync -----------------------------------------------
-
-    def _on_amp_slider(self, value: int) -> None:
-        v = self.AMP_MIN + value * self.AMP_STEP
-        self._amp_spin.blockSignals(True)
-        self._amp_spin.setValue(v)
-        self._amp_spin.blockSignals(False)
-        self._cmd_timer.start()
-
-    def _on_amp_spin(self, value: float) -> None:
-        idx = round((value - self.AMP_MIN) / self.AMP_STEP)
-        self._amp_slider.blockSignals(True)
-        self._amp_slider.setValue(idx)
-        self._amp_slider.blockSignals(False)
-        self._cmd_timer.start()
-
-    def _on_freq_slider(self, value: int) -> None:
-        f = self.FREQ_MIN + value * self.FREQ_STEP
-        self._freq_spin.blockSignals(True)
-        self._freq_spin.setValue(f)
-        self._freq_spin.blockSignals(False)
-        self._cmd_timer.start()
-
-    def _on_freq_spin(self, value: float) -> None:
-        idx = round((value - self.FREQ_MIN) / self.FREQ_STEP)
-        self._freq_slider.blockSignals(True)
-        self._freq_slider.setValue(idx)
-        self._freq_slider.blockSignals(False)
-        self._cmd_timer.start()
-
     def _send_control_params(self) -> None:
         if not self._connected:
             return
-        self._worker.send_command(f"AMP:{self._amplitude():.2f}")
-        self._worker.send_command(f"FREQ:{self._frequency():.2f}")
+        self._worker.send_command(f"AMP:{self._amp_spin.value():.2f}")
+        self._worker.send_command(f"FREQ:{self._freq_spin.value():.2f}")
