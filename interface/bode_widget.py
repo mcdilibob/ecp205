@@ -31,7 +31,7 @@ import pyqtgraph as pg
 from PyQt6.QtGui import QColor
 
 _F_MIN = 0.1    # Hz  — start of frequency range
-_F_MAX = 10.0   # Hz  — end of frequency range
+_F_MAX = 15.0   # Hz  — end of frequency range
 _N_PTS = 5000    # number of frequency points
 
 
@@ -84,6 +84,8 @@ class BodeWidget(pg.PlotWidget):
         self.setLabel("bottom", "Frequency", units="Hz")
         self.showGrid(x=True, y=True, alpha=0.3)
         self.setXRange(_F_MIN, _F_MAX, padding=0)
+        self.setYRange(0, 4, padding=0)
+
         self.getPlotItem().layout.setContentsMargins(0, 0, 16, 0)
         self.getViewBox().setMouseEnabled(x=False, y=False)
 
