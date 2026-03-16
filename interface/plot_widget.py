@@ -23,15 +23,15 @@ class AnglePlotWidget(pg.PlotWidget):
 
         # Appearance
         self.setBackground("#1e1e1e")
-        self.setLabel("left",   "Angle", units="deg")
+        self.setLabel("left",   "Angle", units="rad")
         self.setLabel("bottom", "Time",  units="s")
         self.setTitle("Disk Angles")
         self.showGrid(x=True, y=True, alpha=0.3)
         self.addLegend(offset=(10, 10))
-        self.setYRange(0, 360)
+        self.setYRange(0, 2 * math.pi)
         self.setClipToView(True)
-        # Even grid: major lines every 45°, minor every 15°
-        self.getAxis("left").setTickSpacing(major=45, minor=15)
+        # Even grid: major lines every π/2, minor every π/6
+        self.getAxis("left").setTickSpacing(major=math.pi / 2, minor=math.pi / 6)
         # Right padding
         self.getPlotItem().layout.setContentsMargins(0, 0, 16, 0)
 

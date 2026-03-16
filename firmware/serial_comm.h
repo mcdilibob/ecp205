@@ -62,11 +62,11 @@ inline void serial_send_data(uint32_t ts_ms,
     Serial.print("DATA:");
     Serial.print(ts_ms);
     Serial.print(':');
-    Serial.print(a1, 2);
+    Serial.print(a1, 4);
     Serial.print(':');
-    Serial.print(a2, 2);
+    Serial.print(a2, 4);
     Serial.print(':');
-    Serial.print(a3, 2);
+    Serial.print(a3, 4);
     Serial.print(':');
     Serial.println(vq, 3);
 }

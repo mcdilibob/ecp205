@@ -6,11 +6,11 @@ tuples, so as_arrays() is O(1) (no per-sample Python allocations) and
 last_n_seconds() costs only one boolean mask operation.
 
 Fields per sample:
-    t_ms  : float64  timestamp in milliseconds (from MCU)
-    a1    : float64  disk 1 angle (degrees)
-    a2    : float64  disk 2 angle (degrees)
-    a3    : float64  disk 3 angle (degrees)
-    vq    : float64  motor voltage command (V)
+    t_ms  : uint32  timestamp in milliseconds (from MCU)
+    a1    : float32 disk 1 angle (radians)
+    a2    : float32 disk 2 angle (radians)
+    a3    : float32 disk 3 angle (radians)
+    vq    : float32 motor voltage command (V)
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ _N_COLS = 5   # t_ms, a1, a2, a3, vq
 
 
 class DataBuffer:
-    COLUMNS = ("t_ms", "angle_disk1_deg", "angle_disk2_deg", "angle_disk3_deg", "vq_V")
+    COLUMNS = ("t_ms", "angle_disk1_rad", "angle_disk2_rad", "angle_disk3_rad", "vq_V")
 
     def __init__(self, max_seconds: float = 60.0, sample_rate_hz: float = 200.0) -> None:
         cap = int(max_seconds * sample_rate_hz)

@@ -25,7 +25,7 @@ _BATCH_SIZE = 10
 
 class SerialWorker(QThread):
     # Emitted in batches: five equal-length 1-D float64 arrays
-    #   (t_ms, angle1_deg, angle2_deg, angle3_deg, vq_V)
+    #   (t_ms, angle1_rad, angle2_rad, angle3_rad, vq_V)
     data_received = pyqtSignal(object, object, object, object, object)
 
     # Emitted when an ERR: frame arrives or a serial exception occurs
