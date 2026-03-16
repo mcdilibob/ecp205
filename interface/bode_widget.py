@@ -70,8 +70,9 @@ def _compute_tf(
     else:  # disk 3
         N = np.full_like(s, k1 * k2)
 
-    mag = np.abs(N / D)
-    return f, mag
+    N_mag = np.abs(N)
+    mag   = N_mag / np.abs(D)
+    return f, mag, N_mag
 
 
 class BodeWidget(pg.PlotWidget):
@@ -91,6 +92,7 @@ class BodeWidget(pg.PlotWidget):
 
         pen = pg.mkPen(color=QColor("#f1884e"), width=1.5)
         self._curve = self.plot([], [], pen=pen)
+        self._anti_res_lines: list[pg.InfiniteLine] = []
 
     def update_tf(
         self,
@@ -99,6 +101,24 @@ class BodeWidget(pg.PlotWidget):
         c1: float, c2: float, c3: float,
         disk: int,
     ) -> None:
-        f, mag = _compute_tf(J1, J2, J3, k1, k2, c1, c2, c3, disk)
+        f, mag, N_mag = _compute_tf(J1, J2, J3, k1, k2, c1, c2, c3, disk)
         finite = np.isfinite(mag)
         self._curve.setData(f[finite], mag[finite])
+
+        # Anti-resonances: local minima of |Nᵢ(jω)|
+        dN = np.diff(N_mag)
+        min_idx = np.where((dN[:-1] < 0) & (dN[1:] > 0))[0] + 1
+        anti_res_freqs = f[min_idx]
+
+        for line in self._anti_res_lines:
+            self.removeItem(line)
+        self._anti_res_lines.clear()
+
+        ar_pen = pg.mkPen(
+            color=QColor("#4e9af1"), width=1,
+            style=pg.QtCore.Qt.PenStyle.DashLine,
+        )
+        for freq in anti_res_freqs:
+            line = pg.InfiniteLine(pos=freq, angle=90, pen=ar_pen)
+            self.addItem(line)
+            self._anti_res_lines.append(line)
