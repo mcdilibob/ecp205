@@ -10,6 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pyqtgraph as pg
 from PyQt6.QtGui import QColor
+from math import pi
 
 
 _COLORS = ("#4e9af1", "#f1884e", "#61c972")   # blue, orange, green
@@ -28,10 +29,10 @@ class AnglePlotWidget(pg.PlotWidget):
         self.setTitle("Disk Angles")
         self.showGrid(x=True, y=True, alpha=0.3)
         self.addLegend(offset=(10, 10))
-        self.setYRange(0, 2 * math.pi)
+        self.setYRange(0, 2 * pi)
         self.setClipToView(True)
         # Even grid: major lines every π/2, minor every π/6
-        self.getAxis("left").setTickSpacing(major=math.pi / 2, minor=math.pi / 6)
+        self.getAxis("left").setTickSpacing(major=pi / 2, minor=pi / 6)
         # Right padding
         self.getPlotItem().layout.setContentsMargins(0, 0, 16, 0)
 
