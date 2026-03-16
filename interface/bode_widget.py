@@ -79,8 +79,8 @@ class BodeWidget(pg.PlotWidget):
         super().__init__(parent)
 
         self.setBackground("#1e1e1e")
-        self.setTitle("АЧХ  |θᵢ/T|(jω)")
-        self.setLabel("left",   "Magnitude", units="rad/N·m")
+        self.setTitle("АЧХ")
+        self.setLabel("left",   "Magnitude")
         self.setLabel("bottom", "Frequency", units="Hz")
         self.showGrid(x=True, y=True, alpha=0.3)
         self.setXRange(_F_MIN, _F_MAX, padding=0)
