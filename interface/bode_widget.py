@@ -42,7 +42,7 @@ def _compute_tf(
     disk: int,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return (f_hz, magnitude_dB) for the chosen output disk."""
-    f = np.logspace(np.log10(_F_MIN), np.log10(_F_MAX), _N_PTS)
+    f = np.linspace(_F_MIN, _F_MAX, _N_PTS)
     s = 1j * 2.0 * np.pi * f
 
     # --- Denominator D(s) (degree 6) ---
