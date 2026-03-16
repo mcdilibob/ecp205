@@ -339,9 +339,9 @@ class MainWindow(QMainWindow):
         self._plot_timer.stop()
         self._status_bar.showMessage("Disconnected")
 
-    @pyqtSlot(float, float, float, float, float)
-    def _on_data(self, t_ms: float, a1: float, a2: float, a3: float, vq: float) -> None:
-        self._buffer.append(t_ms, a1, a2, a3, vq)
+    @pyqtSlot(object, object, object, object, object)
+    def _on_data(self, t_ms, a1, a2, a3, vq) -> None:
+        self._buffer.append_batch(t_ms, a1, a2, a3, vq)
 
     @pyqtSlot()
     def _refresh_plot(self) -> None:
