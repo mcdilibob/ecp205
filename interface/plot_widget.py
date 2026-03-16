@@ -53,6 +53,10 @@ class AnglePlotWidget(pg.PlotWidget):
         self._vq_curve = pg.PlotDataItem([], [], pen=vq_pen, name="Vq")
         self._vb2.addItem(self._vq_curve)
 
+        # Lock interaction — no zoom, no pan
+        self.getViewBox().setMouseEnabled(x=False, y=False)
+        self._vb2.setMouseEnabled(x=False, y=False)
+
         self.getViewBox().sigResized.connect(self._update_views)
 
     # -------------------------------------------------------------------------
@@ -88,6 +92,9 @@ class AnglePlotWidget(pg.PlotWidget):
 
         self._vq_curve.setData(ts, vq[mask])
         self._vb2.setGeometry(self.getViewBox().sceneBoundingRect())
+
+        # Always show exactly _window_s seconds on the X axis
+        self.setXRange(ts[-1] - self._window_s, ts[-1], padding=0)
 
     def clear_data(self) -> None:
         for curve in self._curves:

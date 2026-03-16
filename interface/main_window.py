@@ -100,7 +100,7 @@ class MainWindow(QMainWindow):
 
         # Plots side by side — angle plot (wider) | Bode plot
         plots_row = QHBoxLayout()
-        self._plot = AnglePlotWidget(window_seconds=10.0)
+        self._plot = AnglePlotWidget(window_seconds=15.0)
         plots_row.addWidget(self._plot, stretch=3)
         self._bode = BodeWidget()
         plots_row.addWidget(self._bode, stretch=2)
@@ -345,7 +345,7 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot()
     def _refresh_plot(self) -> None:
-        t_ms, a1, a2, a3, vq = self._buffer.last_n_seconds(10.0)
+        t_ms, a1, a2, a3, vq = self._buffer.last_n_seconds(15.0)
         self._plot.update_data(t_ms, a1, a2, a3, vq)
 
     @pyqtSlot()

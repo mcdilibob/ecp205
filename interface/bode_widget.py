@@ -31,7 +31,7 @@ import pyqtgraph as pg
 from PyQt6.QtGui import QColor
 
 _F_MIN = 0.1    # Hz  — start of frequency range
-_F_MAX = 15.0   # Hz  — end of frequency range
+_F_MAX = 10.0   # Hz  — end of frequency range
 _N_PTS = 5000    # number of frequency points
 
 
@@ -70,10 +70,7 @@ def _compute_tf(
     else:  # disk 3
         N = np.full_like(s, k1 * k2)
 
-    with np.errstate(divide="ignore", invalid="ignore"):
-        mag = np.abs(N / D)
-        mag_db = 20.0 * np.log10(np.where(mag > 0, mag, np.nan))
-
+    mag = np.abs(N / D)
     return f, mag
 
 
@@ -83,11 +80,12 @@ class BodeWidget(pg.PlotWidget):
 
         self.setBackground("#1e1e1e")
         self.setTitle("АЧХ  |θᵢ/T|(jω)")
-        self.setLabel("left",   "Magnitude", units="dB")
+        self.setLabel("left",   "Magnitude", units="rad/N·m")
         self.setLabel("bottom", "Frequency", units="Hz")
         self.showGrid(x=True, y=True, alpha=0.3)
-        self.setXRange(np.log10(_F_MIN), np.log10(_F_MAX))
+        self.setXRange(_F_MIN, _F_MAX, padding=0)
         self.getPlotItem().layout.setContentsMargins(0, 0, 16, 0)
+        self.getViewBox().setMouseEnabled(x=False, y=False)
 
         pen = pg.mkPen(color=QColor("#f1884e"), width=1.5)
         self._curve = self.plot([], [], pen=pen)
@@ -99,6 +97,6 @@ class BodeWidget(pg.PlotWidget):
         c1: float, c2: float, c3: float,
         disk: int,
     ) -> None:
-        f, mag_db = _compute_tf(J1, J2, J3, k1, k2, c1, c2, c3, disk)
-        finite = np.isfinite(mag_db)
-        self._curve.setData(f[finite], mag_db[finite])
+        f, mag = _compute_tf(J1, J2, J3, k1, k2, c1, c2, c3, disk)
+        finite = np.isfinite(mag)
+        self._curve.setData(f[finite], mag[finite])
