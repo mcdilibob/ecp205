@@ -2,14 +2,12 @@
 main_window.py — ECP205 GUI main window (PyQt6).
 
 Layout:
-  ┌─ connection bar ──────────────────────────────────────────────────┐
-  │  Port [COM/ttyUSB ▼]  Baud [230400 ▼]  [Connect]  [Disconnect]   │
-  ├─ plot ────────────────────────────────────────────────────────────┤
-  │                  Real-time angle plot (3 disks + Vq)              │
-  ├─ controls ────────────────────────────────────────────────────────┤
-  │  Amplitude (V):  [spinbox]   Frequency (Hz): [spinbox]            │
-  │  [START]   [STOP]   [Export CSV]   [Clear Buffer]                 │
-  └───────────────────────────────────────────────────────────────────┘
+  ┌─ Serial Connection ─────────────────────────────────────────────────────┐
+  ├──────────────────────────────────┬──────────────────────────────────────┤
+  │   Angle plot (real-time)         │   АЧХ / Bode magnitude plot          │
+  ├──────────────────────────────────┴──────────────────────────────────────┤
+  │ [Motor Control]  [Plant Parameters J/k/c + disk selector]               │
+  └─────────────────────────────────────────────────────────────────────────┘
 """
 
 from __future__ import annotations
@@ -20,6 +18,7 @@ import numpy as np
 import serial.tools.list_ports
 from PyQt6.QtCore import QTimer, pyqtSlot
 from PyQt6.QtWidgets import (
+    QButtonGroup,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
@@ -30,11 +29,13 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QRadioButton,
     QStatusBar,
     QVBoxLayout,
     QWidget,
 )
 
+from bode_widget import BodeWidget
 from data_buffer import DataBuffer
 from plot_widget import AnglePlotWidget
 from serial_worker import SerialWorker
@@ -51,23 +52,28 @@ class MainWindow(QMainWindow):
     FREQ_MAX  = 20.0
     FREQ_STEP = 0.1
 
-    # Plot refresh rate
     PLOT_REFRESH_MS = 50   # 20 Hz repaint
 
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("ECP205 — Frequency Response Tool")
-        self.resize(1000, 620)
+        self.resize(1280, 680)
 
         self._worker = SerialWorker(self)
         self._buffer = DataBuffer(max_seconds=60.0, sample_rate_hz=200.0)
         self._connected = False
 
-        # Debounce: send AMP/FREQ command 200 ms after last spinbox change
+        # Debounce: send AMP/FREQ 200 ms after last change
         self._cmd_timer = QTimer(self)
         self._cmd_timer.setSingleShot(True)
         self._cmd_timer.setInterval(200)
         self._cmd_timer.timeout.connect(self._send_control_params)
+
+        # Debounce: redraw Bode 300 ms after last param change
+        self._bode_timer = QTimer(self)
+        self._bode_timer.setSingleShot(True)
+        self._bode_timer.setInterval(300)
+        self._bode_timer.timeout.connect(self._update_bode)
 
         # Plot refresh timer
         self._plot_timer = QTimer(self)
@@ -77,6 +83,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._connect_signals()
         self._set_controls_enabled(False)
+        self._update_bode()   # draw with default params on startup
 
     # -------------------------------------------------------------------------
     # UI construction
@@ -91,11 +98,19 @@ class MainWindow(QMainWindow):
 
         root.addWidget(self._build_connection_bar())
 
+        # Plots side by side — angle plot (wider) | Bode plot
+        plots_row = QHBoxLayout()
         self._plot = AnglePlotWidget(window_seconds=10.0)
-        root.addWidget(self._plot, stretch=1)
+        plots_row.addWidget(self._plot, stretch=3)
+        self._bode = BodeWidget()
+        plots_row.addWidget(self._bode, stretch=2)
+        root.addLayout(plots_row, stretch=1)
 
+        # Bottom controls row
         ctrl_row = QHBoxLayout()
+        ctrl_row.setSpacing(8)
         ctrl_row.addWidget(self._build_control_panel())
+        ctrl_row.addWidget(self._build_plant_params())
         ctrl_row.addStretch()
         root.addLayout(ctrl_row)
 
@@ -149,16 +164,14 @@ class MainWindow(QMainWindow):
         box = QGroupBox("Motor Control")
         outer = QVBoxLayout(box)
 
-        # Input grid: labels in col 0, spinboxes in col 1
         grid = QGridLayout()
-        grid.setColumnStretch(1, 0)
         grid.setHorizontalSpacing(8)
 
         self._amp_spin = self._make_spinbox(
-            self.AMP_MIN, self.AMP_MAX, self.AMP_STEP, initial=1.0
+            self.AMP_MIN, self.AMP_MAX, self.AMP_STEP, decimals=2, initial=1.0
         )
         self._freq_spin = self._make_spinbox(
-            self.FREQ_MIN, self.FREQ_MAX, self.FREQ_STEP, initial=1.0
+            self.FREQ_MIN, self.FREQ_MAX, self.FREQ_STEP, decimals=2, initial=1.0
         )
 
         grid.addWidget(QLabel("Amplitude (V):"),  0, 0)
@@ -167,9 +180,7 @@ class MainWindow(QMainWindow):
         grid.addWidget(self._freq_spin,            1, 1)
         outer.addLayout(grid)
 
-        # Buttons row
         btn_row = QHBoxLayout()
-
         self._btn_start = QPushButton("START")
         self._btn_start.setStyleSheet("background:#2a7a2a; color:white; font-weight:bold;")
         self._btn_start.clicked.connect(self._on_start)
@@ -183,18 +194,72 @@ class MainWindow(QMainWindow):
         outer.addLayout(btn_row)
         return box
 
+    def _build_plant_params(self) -> QGroupBox:
+        box = QGroupBox("Plant Parameters")
+        outer = QVBoxLayout(box)
+
+        # ---- Parameter spinboxes ----
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(6)
+        grid.setVerticalSpacing(4)
+
+        # Helper: (label, lo, hi, step, decimals, default)
+        params = [
+            ("J₁", 0.0001, 1.0, 0.0001, 4, 0.002),
+            ("J₂", 0.0001, 1.0, 0.0001, 4, 0.002),
+            ("J₃", 0.0001, 1.0, 0.0001, 4, 0.002),
+            ("k₁", 0.01, 200.0, 0.01, 2, 0.5),
+            ("k₂", 0.01, 200.0, 0.01, 2, 0.5),
+            ("c₁", 0.0001, 10.0, 0.001, 4, 0.01),
+            ("c₂", 0.0001, 10.0, 0.001, 4, 0.01),
+            ("c₃", 0.0001, 10.0, 0.001, 4, 0.01),
+        ]
+        self._param_spins: list[QDoubleSpinBox] = []
+
+        # Layout: 3 columns of (label, spinbox) pairs
+        positions = [
+            (0, 0), (0, 2), (0, 4),   # J₁ J₂ J₃
+            (1, 0), (1, 2),            # k₁ k₂
+            (2, 0), (2, 2), (2, 4),   # c₁ c₂ c₃
+        ]
+        for (row, col), (lbl, lo, hi, step, dec, default) in zip(positions, params):
+            sb = self._make_spinbox(lo, hi, step, decimals=dec, initial=default, width=80)
+            grid.addWidget(QLabel(lbl), row, col)
+            grid.addWidget(sb, row, col + 1)
+            self._param_spins.append(sb)
+
+        outer.addLayout(grid)
+
+        # ---- Disk selector ----
+        disk_row = QHBoxLayout()
+        disk_row.addWidget(QLabel("АЧХ диска:"))
+        self._disk_group = QButtonGroup(self)
+        for i, label in enumerate(("1", "2", "3"), start=1):
+            rb = QRadioButton(label)
+            if i == 1:
+                rb.setChecked(True)
+            self._disk_group.addButton(rb, i)
+            disk_row.addWidget(rb)
+        disk_row.addStretch()
+        outer.addLayout(disk_row)
+
+        return box
+
     # -------------------------------------------------------------------------
     # Helpers
     # -------------------------------------------------------------------------
 
     @staticmethod
-    def _make_spinbox(lo: float, hi: float, step: float, initial: float) -> QDoubleSpinBox:
+    def _make_spinbox(
+        lo: float, hi: float, step: float,
+        decimals: int = 2, initial: float = 0.0, width: int = 90,
+    ) -> QDoubleSpinBox:
         sb = QDoubleSpinBox()
         sb.setRange(lo, hi)
         sb.setSingleStep(step)
-        sb.setDecimals(2)
+        sb.setDecimals(decimals)
         sb.setValue(initial)
-        sb.setFixedWidth(90)
+        sb.setFixedWidth(width)
         return sb
 
     _DEFAULT_PORT = "/dev/ttyACM0"
@@ -211,11 +276,13 @@ class MainWindow(QMainWindow):
             self._port_combo.setCurrentIndex(idx)
 
     def _set_controls_enabled(self, enabled: bool) -> None:
-        for w in (
-            self._btn_start, self._btn_stop,
-            self._amp_spin, self._freq_spin,
-        ):
+        for w in (self._btn_start, self._btn_stop, self._amp_spin, self._freq_spin):
             w.setEnabled(enabled)
+
+    def _plant_params(self) -> tuple:
+        J1, J2, J3, k1, k2, c1, c2, c3 = (s.value() for s in self._param_spins)
+        disk = self._disk_group.checkedId()
+        return J1, J2, J3, k1, k2, c1, c2, c3, disk
 
     # -------------------------------------------------------------------------
     # Signal wiring
@@ -229,6 +296,10 @@ class MainWindow(QMainWindow):
 
         self._amp_spin.valueChanged.connect(lambda _: self._cmd_timer.start())
         self._freq_spin.valueChanged.connect(lambda _: self._cmd_timer.start())
+
+        for sb in self._param_spins:
+            sb.valueChanged.connect(lambda _: self._bode_timer.start())
+        self._disk_group.idToggled.connect(lambda _, checked: checked and self._update_bode())
 
     # -------------------------------------------------------------------------
     # Slots
@@ -276,6 +347,11 @@ class MainWindow(QMainWindow):
     def _refresh_plot(self) -> None:
         t_ms, a1, a2, a3, vq = self._buffer.last_n_seconds(10.0)
         self._plot.update_data(t_ms, a1, a2, a3, vq)
+
+    @pyqtSlot()
+    def _update_bode(self) -> None:
+        J1, J2, J3, k1, k2, c1, c2, c3, disk = self._plant_params()
+        self._bode.update_tf(J1, J2, J3, k1, k2, c1, c2, c3, disk)
 
     @pyqtSlot(str)
     def _on_error(self, msg: str) -> None:
