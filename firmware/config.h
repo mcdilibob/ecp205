@@ -54,4 +54,4 @@
 #define DATA_RATE_HZ       200      // serial data output rate (Hz)
 
 // --- Serial ---
-#define SERIAL_BAUD        230400
+#define SERIAL_BAUD        115200

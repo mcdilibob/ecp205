@@ -135,7 +135,7 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(QLabel("Baud:"))
         self._baud_combo = QComboBox()
-        for b in ("230400", "115200", "57600"):
+        for b in ("115200", "57600"):
             self._baud_combo.addItem(b)
         layout.addWidget(self._baud_combo)
 
@@ -200,7 +200,7 @@ class MainWindow(QMainWindow):
 
         # Connection
         port = s.value("connection/port", self._DEFAULT_PORT)
-        baud = s.value("connection/baud", "230400")
+        baud = s.value("connection/baud", "115200")
         idx = self._port_combo.findText(port)
         if idx >= 0:
             self._port_combo.setCurrentIndex(idx)

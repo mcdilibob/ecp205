@@ -14,7 +14,7 @@ with first-order lag, giving realistic-looking phase shifts on a Bode plot.
 
 Usage:
     /home/pda/ecp205/interface/.venv/bin/python emulator.py
-    # note the printed /dev/pts/N, enter it in the GUI, baud 230400
+    # note the printed /dev/pts/N, enter it in the GUI, baud 115200
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ def main() -> None:
     tty.setraw(master_fd)
 
     print(f"[emulator] Virtual serial port: \033[1;32m{slave_name}\033[0m")
-    print( "[emulator] Connect the GUI to that port at baud 230400.")
+    print( "[emulator] Connect the GUI to that port at baud 115200.")
     print( "[emulator] Press Ctrl+C to stop.\n")
 
     # Send READY
