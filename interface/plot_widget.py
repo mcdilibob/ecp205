@@ -43,26 +43,12 @@ class AnglePlotWidget(pg.PlotWidget):
             curve = self.plot([], [], pen=pen, name=label)
             self._curves.append(curve)
 
-        # Motor command overlay (right Y-axis)
-        self._vb2 = pg.ViewBox()
-        self.scene().addItem(self._vb2)
-        self.getAxis("right").linkToView(self._vb2)
-        self._vb2.setXLink(self)
-        self.hideAxis("right")
+        # Motor command on the same Y axis
         vq_pen = pg.mkPen(color=QColor("#b0b0b0"), width=1, style=pg.QtCore.Qt.PenStyle.DashLine)
-        self._vq_curve = pg.PlotDataItem([], [], pen=vq_pen, name="Vq")
-        self._vb2.addItem(self._vq_curve)
+        self._vq_curve = self.plot([], [], pen=vq_pen, name="Vq")
 
         # Lock interaction — no zoom, no pan
         self.getViewBox().setMouseEnabled(x=False, y=False)
-        self._vb2.setMouseEnabled(x=False, y=False)
-
-        self.getViewBox().sigResized.connect(self._update_views)
-
-    # -------------------------------------------------------------------------
-
-    def _update_views(self) -> None:
-        self._vb2.setGeometry(self.getViewBox().sceneBoundingRect())
 
     def set_window(self, seconds: float) -> None:
         self._window_s = max(1.0, seconds)
@@ -91,7 +77,6 @@ class AnglePlotWidget(pg.PlotWidget):
             curve.setData(ts, angles)
 
         self._vq_curve.setData(ts, vq[mask])
-        self._vb2.setGeometry(self.getViewBox().sceneBoundingRect())
 
         # Always show exactly _window_s seconds on the X axis
         self.setXRange(ts[-1] - self._window_s, ts[-1], padding=0)

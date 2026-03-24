@@ -94,6 +94,15 @@ class BodeWidget(pg.PlotWidget):
         self._curve = self.plot([], [], pen=pen)
         self._anti_res_lines: list[pg.InfiniteLine] = []
 
+        self._exp_x: list[float] = []
+        self._exp_y: list[float] = []
+        self._exp_scatter = pg.ScatterPlotItem(
+            symbol="o", size=10,
+            pen=pg.mkPen(color=QColor("#61c972"), width=1.5),
+            brush=pg.mkBrush(color=QColor("#61c972")),
+        )
+        self.addItem(self._exp_scatter)
+
     def update_tf(
         self,
         J1: float, J2: float, J3: float,
@@ -122,3 +131,13 @@ class BodeWidget(pg.PlotWidget):
             line = pg.InfiniteLine(pos=freq, angle=90, pen=ar_pen)
             self.addItem(line)
             self._anti_res_lines.append(line)
+
+    def add_exp_point(self, freq: float, magnitude: float) -> None:
+        self._exp_x.append(freq)
+        self._exp_y.append(magnitude)
+        self._exp_scatter.setData(x=self._exp_x, y=self._exp_y)
+
+    def clear_exp_points(self) -> None:
+        self._exp_x.clear()
+        self._exp_y.clear()
+        self._exp_scatter.setData(x=[], y=[])

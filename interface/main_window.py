@@ -191,6 +191,14 @@ class MainWindow(QMainWindow):
         self._btn_stop.clicked.connect(self._on_stop)
         btn_row.addWidget(self._btn_stop)
 
+        self._btn_put_point = QPushButton("Put Point")
+        self._btn_put_point.clicked.connect(self._on_put_point)
+        btn_row.addWidget(self._btn_put_point)
+
+        self._btn_clear_points = QPushButton("Clear Points")
+        self._btn_clear_points.clicked.connect(lambda: self._bode.clear_exp_points())
+        btn_row.addWidget(self._btn_clear_points)
+
         outer.addLayout(btn_row)
         return box
 
@@ -276,7 +284,8 @@ class MainWindow(QMainWindow):
             self._port_combo.setCurrentIndex(idx)
 
     def _set_controls_enabled(self, enabled: bool) -> None:
-        for w in (self._btn_start, self._btn_stop, self._amp_spin, self._freq_spin):
+        for w in (self._btn_start, self._btn_stop, self._amp_spin, self._freq_spin,
+                  self._btn_put_point):
             w.setEnabled(enabled)
 
     def _plant_params(self) -> tuple:
@@ -361,10 +370,17 @@ class MainWindow(QMainWindow):
     def _on_start(self) -> None:
         self._send_control_params()
         self._worker.send_command("START")
+        self._amp_spin.setEnabled(False)
+        self._freq_spin.setEnabled(False)
+        self._btn_put_point.setEnabled(False)
+
 
     @pyqtSlot()
     def _on_stop(self) -> None:
         self._worker.send_command("STOP")
+        self._amp_spin.setEnabled(True)
+        self._freq_spin.setEnabled(True)
+        self._btn_put_point.setEnabled(True)
 
     @pyqtSlot()
     def _on_export(self) -> None:
@@ -385,6 +401,24 @@ class MainWindow(QMainWindow):
     def _on_clear(self) -> None:
         self._buffer.clear()
         self._plot.clear_data()
+
+    @pyqtSlot()
+    def _on_put_point(self) -> None:
+        freq = self._freq_spin.value()
+        amp_in = self._amp_spin.value()
+        if amp_in == 0.0:
+            return
+
+        # Use at least 3 full periods, minimum 2 s
+        window = max(2.0, 3.0 / freq)
+        t_ms, a1, a2, a3, _ = self._buffer.last_n_seconds(window)
+        if t_ms.size < 4:
+            return
+
+        disk = self._disk_group.checkedId()  # 1, 2, or 3
+        angles = (a1, a2, a3)[disk - 1]
+        amp_out = (angles.max() - angles.min()) / 2.0
+        self._bode.add_exp_point(freq, amp_out / amp_in)
 
     def _send_control_params(self) -> None:
         if not self._connected:
