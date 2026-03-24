@@ -1,5 +1,5 @@
 """
-data_buffer.py — Pre-allocated numpy ring buffer for ECP205 measurement data.
+data/data_buffer.py — Pre-allocated numpy ring buffer for ECP205 measurement data.
 
 Uses a fixed-size numpy array with a write-head pointer instead of a deque of
 tuples, so as_arrays() is O(1) (no per-sample Python allocations) and

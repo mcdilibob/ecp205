@@ -1,3 +1,7 @@
 .claude
 interface/.venv
 interface/__pycache__
+Gyro_main
+interface/gui/__pycache__
+interface/data/__pycache__
+interface/serial_comm/__pycache__

@@ -1,5 +1,5 @@
 """
-bode_widget.py — Bode magnitude (АЧХ) plot for ECP205 torsional plant.
+gui/bode_widget.py — Bode magnitude (АЧХ) plot for ECP205 torsional plant.
 
 Transfer functions from ECP Model 205 manual, Appendix A (eqns A.4-6…A.4-12):
 
@@ -40,8 +40,8 @@ def _compute_tf(
     k1: float, k2: float,
     c1: float, c2: float, c3: float,
     disk: int,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Return (f_hz, magnitude_dB) for the chosen output disk."""
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return (f_hz, magnitude, N_magnitude) for the chosen output disk."""
     f = np.linspace(_F_MIN, _F_MAX, _N_PTS)
     s = 1j * 2.0 * np.pi * f
 
@@ -141,3 +141,7 @@ class BodeWidget(pg.PlotWidget):
         self._exp_x.clear()
         self._exp_y.clear()
         self._exp_scatter.setData(x=[], y=[])
+
+    def save_png(self, path: str) -> None:
+        exporter = pg.exporters.ImageExporter(self.getPlotItem())
+        exporter.export(path)

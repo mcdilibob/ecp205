@@ -1,5 +1,5 @@
 """
-main_window.py — ECP205 GUI main window (PyQt6).
+gui/main_window.py — ECP205 GUI main window (PyQt6).
 
 Layout:
   ┌─ Serial Connection ─────────────────────────────────────────────────────┐
@@ -16,42 +16,33 @@ from pathlib import Path
 
 import numpy as np
 import serial.tools.list_ports
-from PyQt6.QtCore import QTimer, pyqtSlot
+from PyQt6.QtCore import QSettings, QTimer, pyqtSlot
 from PyQt6.QtWidgets import (
-    QButtonGroup,
     QComboBox,
-    QDoubleSpinBox,
     QFileDialog,
-    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QRadioButton,
     QStatusBar,
     QVBoxLayout,
     QWidget,
 )
 
-from bode_widget import BodeWidget
-from data_buffer import DataBuffer
-from plot_widget import AnglePlotWidget
-from serial_worker import SerialWorker
+from .bode_widget import BodeWidget
+from .control_panel import MotorControlPanel, PlantParamsPanel
+from .plot_widget import AnglePlotWidget
+from data.data_buffer import DataBuffer
+from serial_comm.serial_worker import SerialWorker
+from serial_comm.protocol import cmd_start, cmd_stop, cmd_amp, cmd_freq
+
+_SETTINGS_ORG = "ECP205"
+_SETTINGS_APP = "FrequencyResponseTool"
 
 
 class MainWindow(QMainWindow):
-    # Amplitude range (V)
-    AMP_MIN  = 0.0
-    AMP_MAX  = 10.0
-    AMP_STEP = 0.1
-
-    # Frequency range (Hz)
-    FREQ_MIN  = 0.1
-    FREQ_MAX  = 20.0
-    FREQ_STEP = 0.1
-
     PLOT_REFRESH_MS = 50   # 20 Hz repaint
 
     def __init__(self) -> None:
@@ -63,7 +54,7 @@ class MainWindow(QMainWindow):
         self._buffer = DataBuffer(max_seconds=60.0, sample_rate_hz=200.0)
         self._connected = False
 
-        # Debounce: send AMP/FREQ 200 ms after last change
+        # Debounce: send AMP/FREQ 200 ms after last spinbox change
         self._cmd_timer = QTimer(self)
         self._cmd_timer.setSingleShot(True)
         self._cmd_timer.setInterval(200)
@@ -82,8 +73,9 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self._connect_signals()
-        self._set_controls_enabled(False)
-        self._update_bode()   # draw with default params on startup
+        self._restore_settings()
+        self._motor_ctrl.set_enabled(False)
+        self._update_bode()   # draw with restored/default params on startup
 
     # -------------------------------------------------------------------------
     # UI construction
@@ -107,10 +99,12 @@ class MainWindow(QMainWindow):
         root.addLayout(plots_row, stretch=1)
 
         # Bottom controls row
+        self._motor_ctrl  = MotorControlPanel()
+        self._plant_panel = PlantParamsPanel()
         ctrl_row = QHBoxLayout()
         ctrl_row.setSpacing(8)
-        ctrl_row.addWidget(self._build_control_panel())
-        ctrl_row.addWidget(self._build_plant_params())
+        ctrl_row.addWidget(self._motor_ctrl)
+        ctrl_row.addWidget(self._plant_panel)
         ctrl_row.addStretch()
         root.addLayout(ctrl_row)
 
@@ -121,6 +115,12 @@ class MainWindow(QMainWindow):
     def _build_connection_bar(self) -> QGroupBox:
         box = QGroupBox("Serial Connection")
         layout = QHBoxLayout(box)
+
+        # LED status indicator
+        self._led = QLabel()
+        self._led.setFixedSize(12, 12)
+        self._set_led(False)
+        layout.addWidget(self._led)
 
         layout.addWidget(QLabel("Port:"))
         self._port_combo = QComboBox()
@@ -140,15 +140,25 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._baud_combo)
 
         self._btn_connect = QPushButton("Connect")
+        self._btn_connect.setObjectName("btn_connect")
         self._btn_connect.clicked.connect(self._on_connect)
         layout.addWidget(self._btn_connect)
 
         self._btn_disconnect = QPushButton("Disconnect")
+        self._btn_disconnect.setObjectName("btn_disconnect")
         self._btn_disconnect.setEnabled(False)
         self._btn_disconnect.clicked.connect(self._on_disconnect)
         layout.addWidget(self._btn_disconnect)
 
         layout.addStretch()
+
+        btn_plot_png = QPushButton("Plot PNG")
+        btn_plot_png.clicked.connect(self._on_save_plot_png)
+        layout.addWidget(btn_plot_png)
+
+        btn_bode_png = QPushButton("Bode PNG")
+        btn_bode_png.clicked.connect(self._on_save_bode_png)
+        layout.addWidget(btn_bode_png)
 
         self._btn_export = QPushButton("Export CSV")
         self._btn_export.clicked.connect(self._on_export)
@@ -160,115 +170,13 @@ class MainWindow(QMainWindow):
 
         return box
 
-    def _build_control_panel(self) -> QGroupBox:
-        box = QGroupBox("Motor Control")
-        outer = QVBoxLayout(box)
-
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(8)
-
-        self._amp_spin = self._make_spinbox(
-            self.AMP_MIN, self.AMP_MAX, self.AMP_STEP, decimals=2, initial=1.0
-        )
-        self._freq_spin = self._make_spinbox(
-            self.FREQ_MIN, self.FREQ_MAX, self.FREQ_STEP, decimals=2, initial=1.0
-        )
-
-        grid.addWidget(QLabel("Amplitude (V):"),  0, 0)
-        grid.addWidget(self._amp_spin,             0, 1)
-        grid.addWidget(QLabel("Frequency (Hz):"), 1, 0)
-        grid.addWidget(self._freq_spin,            1, 1)
-        outer.addLayout(grid)
-
-        btn_row = QHBoxLayout()
-        self._btn_start = QPushButton("START")
-        self._btn_start.setStyleSheet("background:#2a7a2a; color:white; font-weight:bold;")
-        self._btn_start.clicked.connect(self._on_start)
-        btn_row.addWidget(self._btn_start)
-
-        self._btn_stop = QPushButton("STOP")
-        self._btn_stop.setStyleSheet("background:#7a2a2a; color:white; font-weight:bold;")
-        self._btn_stop.clicked.connect(self._on_stop)
-        btn_row.addWidget(self._btn_stop)
-
-        self._btn_put_point = QPushButton("Put Point")
-        self._btn_put_point.clicked.connect(self._on_put_point)
-        btn_row.addWidget(self._btn_put_point)
-
-        self._btn_clear_points = QPushButton("Clear Points")
-        self._btn_clear_points.clicked.connect(lambda: self._bode.clear_exp_points())
-        btn_row.addWidget(self._btn_clear_points)
-
-        outer.addLayout(btn_row)
-        return box
-
-    def _build_plant_params(self) -> QGroupBox:
-        box = QGroupBox("Plant Parameters")
-        outer = QVBoxLayout(box)
-
-        # ---- Parameter spinboxes ----
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(6)
-        grid.setVerticalSpacing(4)
-
-        # Helper: (label, lo, hi, step, decimals, default)
-        params = [
-            ("J₁", 0.0001, 1.0, 0.0001, 4, 0.0024),
-            ("J₂", 0.0001, 1.0, 0.0001, 4, 0.0019),
-            ("J₃", 0.0001, 1.0, 0.0001, 4, 0.0019),
-            ("k₁", 0.01, 200.0, 0.01, 2, 2.7),
-            ("k₂", 0.01, 200.0, 0.01, 2, 2.8),
-            ("c₁", 0.0, 10.0, 0.001, 4, 0.0),
-            ("c₂", 0.0, 10.0, 0.001, 4, 0.0),
-            ("c₃", 0.0, 10.0, 0.001, 4, 0.0),
-        ]
-        self._param_spins: list[QDoubleSpinBox] = []
-
-        # Layout: 3 columns of (label, spinbox) pairs
-        positions = [
-            (0, 0), (0, 2), (0, 4),   # J₁ J₂ J₃
-            (1, 0), (1, 2),            # k₁ k₂
-            (2, 0), (2, 2), (2, 4),   # c₁ c₂ c₃
-        ]
-        for (row, col), (lbl, lo, hi, step, dec, default) in zip(positions, params):
-            sb = self._make_spinbox(lo, hi, step, decimals=dec, initial=default, width=80)
-            grid.addWidget(QLabel(lbl), row, col)
-            grid.addWidget(sb, row, col + 1)
-            self._param_spins.append(sb)
-
-        outer.addLayout(grid)
-
-        # ---- Disk selector ----
-        disk_row = QHBoxLayout()
-        disk_row.addWidget(QLabel("АЧХ диска:"))
-        self._disk_group = QButtonGroup(self)
-        for i, label in enumerate(("1", "2", "3"), start=1):
-            rb = QRadioButton(label)
-            if i == 1:
-                rb.setChecked(True)
-            self._disk_group.addButton(rb, i)
-            disk_row.addWidget(rb)
-        disk_row.addStretch()
-        outer.addLayout(disk_row)
-
-        return box
-
     # -------------------------------------------------------------------------
     # Helpers
     # -------------------------------------------------------------------------
 
-    @staticmethod
-    def _make_spinbox(
-        lo: float, hi: float, step: float,
-        decimals: int = 2, initial: float = 0.0, width: int = 90,
-    ) -> QDoubleSpinBox:
-        sb = QDoubleSpinBox()
-        sb.setRange(lo, hi)
-        sb.setSingleStep(step)
-        sb.setDecimals(decimals)
-        sb.setValue(initial)
-        sb.setFixedWidth(width)
-        return sb
+    def _set_led(self, connected: bool) -> None:
+        color = "#a6e3a1" if connected else "#585b70"
+        self._led.setStyleSheet(f"background-color: {color}; border-radius: 6px;")
 
     _DEFAULT_PORT = "/dev/ttyACM0"
 
@@ -283,32 +191,70 @@ class MainWindow(QMainWindow):
         if idx >= 0:
             self._port_combo.setCurrentIndex(idx)
 
-    def _set_controls_enabled(self, enabled: bool) -> None:
-        for w in (self._btn_start, self._btn_stop, self._amp_spin, self._freq_spin,
-                  self._btn_put_point):
-            w.setEnabled(enabled)
+    # -------------------------------------------------------------------------
+    # Settings persistence
+    # -------------------------------------------------------------------------
 
-    def _plant_params(self) -> tuple:
-        J1, J2, J3, k1, k2, c1, c2, c3 = (s.value() for s in self._param_spins)
-        disk = self._disk_group.checkedId()
-        return J1, J2, J3, k1, k2, c1, c2, c3, disk
+    def _restore_settings(self) -> None:
+        s = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
+
+        # Connection
+        port = s.value("connection/port", self._DEFAULT_PORT)
+        baud = s.value("connection/baud", "230400")
+        idx = self._port_combo.findText(port)
+        if idx >= 0:
+            self._port_combo.setCurrentIndex(idx)
+        idx = self._baud_combo.findText(baud)
+        if idx >= 0:
+            self._baud_combo.setCurrentIndex(idx)
+
+        # Motor control
+        amp  = float(s.value("motor/amp",  1.0))
+        freq = float(s.value("motor/freq", 1.0))
+        self._motor_ctrl.set_values(amp, freq)
+
+        # Plant parameters
+        _keys     = ("J1", "J2", "J3", "k1", "k2", "c1", "c2", "c3")
+        _defaults = (0.0024, 0.0019, 0.0019, 2.7, 2.8, 0.0, 0.0, 0.0)
+        vals = [float(s.value(f"plant/{k}", d)) for k, d in zip(_keys, _defaults)]
+        disk = int(s.value("plant/disk", 1))
+        self._plant_panel.set_params(*vals, disk)
+
+    def closeEvent(self, event) -> None:
+        s = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
+        s.setValue("connection/port", self._port_combo.currentText())
+        s.setValue("connection/baud", self._baud_combo.currentText())
+        s.setValue("motor/amp",  self._motor_ctrl.amp())
+        s.setValue("motor/freq", self._motor_ctrl.freq())
+        J1, J2, J3, k1, k2, c1, c2, c3, disk = self._plant_panel.get_params()
+        for key, val in zip(
+            ("J1", "J2", "J3", "k1", "k2", "c1", "c2", "c3"),
+            (J1, J2, J3, k1, k2, c1, c2, c3),
+        ):
+            s.setValue(f"plant/{key}", val)
+        s.setValue("plant/disk", disk)
+        super().closeEvent(event)
 
     # -------------------------------------------------------------------------
     # Signal wiring
     # -------------------------------------------------------------------------
 
     def _connect_signals(self) -> None:
+        # Serial worker
         self._worker.data_received.connect(self._on_data)
         self._worker.error_occurred.connect(self._on_error)
         self._worker.connected.connect(self._on_connected)
         self._worker.disconnected.connect(self._on_disconnected)
 
-        self._amp_spin.valueChanged.connect(lambda _: self._cmd_timer.start())
-        self._freq_spin.valueChanged.connect(lambda _: self._cmd_timer.start())
+        # Motor control panel
+        self._motor_ctrl.params_changed.connect(lambda: self._cmd_timer.start())
+        self._motor_ctrl.start_requested.connect(self._on_start)
+        self._motor_ctrl.stop_requested.connect(self._on_stop)
+        self._motor_ctrl.put_point_requested.connect(self._on_put_point)
+        self._motor_ctrl.clear_points_requested.connect(self._bode.clear_exp_points)
 
-        for sb in self._param_spins:
-            sb.valueChanged.connect(lambda _: self._bode_timer.start())
-        self._disk_group.idToggled.connect(lambda _, checked: checked and self._update_bode())
+        # Plant params panel
+        self._plant_panel.params_changed.connect(lambda: self._bode_timer.start())
 
     # -------------------------------------------------------------------------
     # Slots
@@ -325,7 +271,7 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot()
     def _on_disconnect(self) -> None:
-        self._worker.send_command("STOP")
+        self._worker.send_command(cmd_stop())
         self._worker.close()
 
     @pyqtSlot()
@@ -333,7 +279,8 @@ class MainWindow(QMainWindow):
         self._connected = True
         self._btn_connect.setEnabled(False)
         self._btn_disconnect.setEnabled(True)
-        self._set_controls_enabled(True)
+        self._motor_ctrl.set_enabled(True)
+        self._set_led(True)
         self._plot_timer.start()
         self._status_bar.showMessage(
             f"Connected — {self._port_combo.currentText()} @ {self._baud_combo.currentText()}"
@@ -344,7 +291,8 @@ class MainWindow(QMainWindow):
         self._connected = False
         self._btn_connect.setEnabled(True)
         self._btn_disconnect.setEnabled(False)
-        self._set_controls_enabled(False)
+        self._motor_ctrl.set_enabled(False)
+        self._set_led(False)
         self._plot_timer.stop()
         self._status_bar.showMessage("Disconnected")
 
@@ -359,7 +307,7 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot()
     def _update_bode(self) -> None:
-        J1, J2, J3, k1, k2, c1, c2, c3, disk = self._plant_params()
+        J1, J2, J3, k1, k2, c1, c2, c3, disk = self._plant_panel.get_params()
         self._bode.update_tf(J1, J2, J3, k1, k2, c1, c2, c3, disk)
 
     @pyqtSlot(str)
@@ -369,18 +317,13 @@ class MainWindow(QMainWindow):
     @pyqtSlot()
     def _on_start(self) -> None:
         self._send_control_params()
-        self._worker.send_command("START")
-        self._amp_spin.setEnabled(False)
-        self._freq_spin.setEnabled(False)
-        self._btn_put_point.setEnabled(False)
-
+        self._worker.send_command(cmd_start())
+        self._motor_ctrl.set_running(True)
 
     @pyqtSlot()
     def _on_stop(self) -> None:
-        self._worker.send_command("STOP")
-        self._amp_spin.setEnabled(True)
-        self._freq_spin.setEnabled(True)
-        self._btn_put_point.setEnabled(True)
+        self._worker.send_command(cmd_stop())
+        self._motor_ctrl.set_running(False)
 
     @pyqtSlot()
     def _on_export(self) -> None:
@@ -393,7 +336,9 @@ class MainWindow(QMainWindow):
         if path:
             try:
                 self._buffer.export_csv(path)
-                self._status_bar.showMessage(f"Exported {len(self._buffer)} samples → {path}")
+                self._status_bar.showMessage(
+                    f"Exported {len(self._buffer)} samples → {path}"
+                )
             except Exception as exc:
                 QMessageBox.critical(self, "Export Error", str(exc))
 
@@ -404,8 +349,8 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot()
     def _on_put_point(self) -> None:
-        freq = self._freq_spin.value()
-        amp_in = self._amp_spin.value()
+        freq   = self._motor_ctrl.freq()
+        amp_in = self._motor_ctrl.amp()
         if amp_in == 0.0:
             return
 
@@ -415,13 +360,31 @@ class MainWindow(QMainWindow):
         if t_ms.size < 4:
             return
 
-        disk = self._disk_group.checkedId()  # 1, 2, or 3
-        angles = (a1, a2, a3)[disk - 1]
+        _, _, _, _, _, _, _, _, disk = self._plant_panel.get_params()
+        angles  = (a1, a2, a3)[disk - 1]
         amp_out = (angles.max() - angles.min()) / 2.0
         self._bode.add_exp_point(freq, amp_out / amp_in)
+
+    @pyqtSlot()
+    def _on_save_plot_png(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Plot PNG", str(Path.home()), "PNG images (*.png)"
+        )
+        if path:
+            self._plot.save_png(path)
+            self._status_bar.showMessage(f"Plot saved → {path}")
+
+    @pyqtSlot()
+    def _on_save_bode_png(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Bode PNG", str(Path.home()), "PNG images (*.png)"
+        )
+        if path:
+            self._bode.save_png(path)
+            self._status_bar.showMessage(f"Bode saved → {path}")
 
     def _send_control_params(self) -> None:
         if not self._connected:
             return
-        self._worker.send_command(f"AMP:{self._amp_spin.value():.2f}")
-        self._worker.send_command(f"FREQ:{self._freq_spin.value():.2f}")
+        self._worker.send_command(cmd_amp(self._motor_ctrl.amp()))
+        self._worker.send_command(cmd_freq(self._motor_ctrl.freq()))

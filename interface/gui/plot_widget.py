@@ -1,5 +1,5 @@
 """
-plot_widget.py — Real-time pyqtgraph plot for 3 disk angles.
+gui/plot_widget.py — Real-time pyqtgraph plot for 3 disk angles.
 
 Shows a rolling window of the last `window_seconds` of data.
 Call update_data() from the main window whenever new samples arrive.
@@ -7,10 +7,11 @@ Call update_data() from the main window whenever new samples arrive.
 
 from __future__ import annotations
 
+from math import pi
+
 import numpy as np
 import pyqtgraph as pg
 from PyQt6.QtGui import QColor
-from math import pi
 
 
 _COLORS = ("#4e9af1", "#f1884e", "#61c972")   # blue, orange, green
@@ -85,3 +86,7 @@ class AnglePlotWidget(pg.PlotWidget):
         for curve in self._curves:
             curve.setData([], [])
         self._vq_curve.setData([], [])
+
+    def save_png(self, path: str) -> None:
+        exporter = pg.exporters.ImageExporter(self.getPlotItem())
+        exporter.export(path)

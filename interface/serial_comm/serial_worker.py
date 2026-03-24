@@ -1,5 +1,5 @@
 """
-serial_worker.py — Background QThread for non-blocking serial I/O.
+serial_comm/serial_worker.py — Background QThread for non-blocking serial I/O.
 
 Reads lines from the MCU, parses DATA / ERR frames, and emits Qt signals.
 Commands are sent thread-safely via send_command() — they are queued and
@@ -18,6 +18,8 @@ import threading
 import numpy as np
 import serial
 from PyQt6.QtCore import QThread, pyqtSignal
+
+from .protocol import parse_data
 
 # Emit one signal per this many samples (200 Hz / 10 = 20 Hz signal rate)
 _BATCH_SIZE = 10
@@ -106,7 +108,7 @@ class SerialWorker(QThread):
                 text = line.decode("utf-8", errors="replace").strip()
 
                 if text.startswith("DATA:"):
-                    parsed = self._parse_data(text[5:])
+                    parsed = parse_data(text[5:])
                     if parsed is not None:
                         t, a1, a2, a3, vq = parsed
                         batch_t [batch_i] = t
@@ -134,21 +136,3 @@ class SerialWorker(QThread):
             self._ser.close()
             self._ser = None
             self.disconnected.emit()
-
-    # -------------------------------------------------------------------------
-
-    @staticmethod
-    def _parse_data(payload: str) -> tuple | None:
-        parts = payload.split(":")
-        if len(parts) != 5:
-            return None
-        try:
-            return (
-                float(parts[0]),
-                float(parts[1]),
-                float(parts[2]),
-                float(parts[3]),
-                float(parts[4]),
-            )
-        except ValueError:
-            return None

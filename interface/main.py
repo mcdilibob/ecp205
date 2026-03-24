@@ -11,15 +11,17 @@ import sys
 import pyqtgraph as pg
 from PyQt6.QtWidgets import QApplication
 
-from main_window import MainWindow
+from gui.main_window import MainWindow
+from gui.styles import DARK_THEME
 
 
 def main() -> None:
-    pg.setConfigOptions(antialias=True, foreground="w", background="#1e1e1e")
+    pg.setConfigOptions(antialias=True, foreground="w", background="#1e1e2e")
 
     app = QApplication(sys.argv)
     app.setApplicationName("ECP205 Frequency Response Tool")
     app.setStyle("Fusion")
+    app.setStyleSheet(DARK_THEME)
 
     window = MainWindow()
     window.show()
