@@ -73,12 +73,15 @@ class MotorControlPanel(QGroupBox):
 
     def set_enabled(self, enabled: bool) -> None:
         """Enable or disable all interactive controls (called on connect/disconnect)."""
-        for w in (self._btn_start, self._btn_stop,
-                  self._amp_spin, self._freq_spin, self._btn_put):
+        for w in (self._btn_toggle, self._amp_spin, self._freq_spin, self._btn_put):
             w.setEnabled(enabled)
 
     def set_running(self, running: bool) -> None:
-        """Lock amp/freq/put-point while excitation is active."""
+        """Sync toggle button state and lock spinboxes while excitation is active."""
+        self._btn_toggle.blockSignals(True)
+        self._btn_toggle.setChecked(running)
+        self._btn_toggle.setText("Stop Plant" if running else "Start Plant")
+        self._btn_toggle.blockSignals(False)
         self._amp_spin.setEnabled(not running)
         self._freq_spin.setEnabled(not running)
         self._btn_put.setEnabled(not running)
@@ -91,6 +94,13 @@ class MotorControlPanel(QGroupBox):
             spin.blockSignals(False)
 
     # ---- internal ----
+
+    def _on_toggle(self, checked: bool) -> None:
+        self._btn_toggle.setText("Stop Plant" if checked else "Start Plant")
+        if checked:
+            self.start_requested.emit()
+        else:
+            self.stop_requested.emit()
 
     def _build(self) -> None:
         outer = QVBoxLayout(self)
@@ -112,15 +122,11 @@ class MotorControlPanel(QGroupBox):
 
         btn_row = QHBoxLayout()
 
-        self._btn_start = QPushButton("START")
-        self._btn_start.setObjectName("btn_start")
-        self._btn_start.clicked.connect(self.start_requested)
-        btn_row.addWidget(self._btn_start)
-
-        self._btn_stop = QPushButton("STOP")
-        self._btn_stop.setObjectName("btn_stop")
-        self._btn_stop.clicked.connect(self.stop_requested)
-        btn_row.addWidget(self._btn_stop)
+        self._btn_toggle = QPushButton("Start Plant")
+        self._btn_toggle.setObjectName("btn_toggle_plant")
+        self._btn_toggle.setCheckable(True)
+        self._btn_toggle.toggled.connect(self._on_toggle)
+        btn_row.addWidget(self._btn_toggle)
 
         self._btn_put = QPushButton("Put Point")
         self._btn_put.clicked.connect(self.put_point_requested)
