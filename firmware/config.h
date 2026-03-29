@@ -51,7 +51,7 @@
 
 // --- Control loop rates ---
 #define FOC_RATE_HZ        1000     // FOC interrupt frequency (Hz)
-#define DATA_RATE_HZ       200      // serial data output rate (Hz)
+#define DATA_RATE_HZ       100       // serial data output rate (Hz)
 
 // --- Serial ---
 #define SERIAL_BAUD        115200

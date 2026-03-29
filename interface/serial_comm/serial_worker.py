@@ -21,8 +21,8 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 from .protocol import parse_data
 
-# Emit one signal per this many samples (200 Hz / 10 = 20 Hz signal rate)
-_BATCH_SIZE = 10
+# Emit one signal per this many samples (100 Hz / 5 = 20 Hz signal rate)
+_BATCH_SIZE = 5
 
 
 class SerialWorker(QThread):
@@ -40,7 +40,7 @@ class SerialWorker(QThread):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._port  = ""
-        self._baud  = 230400
+        self._baud  = 115200
         self._ser: serial.Serial | None = None
         self._stop_event   = threading.Event()
         # Thread-safe command queue: main thread enqueues, worker dequeues
@@ -50,7 +50,7 @@ class SerialWorker(QThread):
     # Public API (safe to call from any thread)
     # -------------------------------------------------------------------------
 
-    def open(self, port: str, baud: int = 230400) -> None:
+    def open(self, port: str, baud: int = 115200) -> None:
         self._port = port
         self._baud = baud
         self._stop_event.clear()

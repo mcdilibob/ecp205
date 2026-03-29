@@ -45,7 +45,7 @@ public:
         return true;
     }
 
-    // Returns angle in radians [0.0, 2π) with calibration and inversion applied
+    // Returns angle in radians [-π, π) with calibration and inversion applied
     // channel: ADS_CH_DISK1 / ADS_CH_DISK2 / ADS_CH_DISK3
     float readAngle(uint8_t channel) {
         float angle = _readAngleRaw(channel);
@@ -55,12 +55,12 @@ public:
 
         // Apply direction inversion if configured
         if (_invert[channel]) {
-            angle = TWO_PI - angle;
+            angle = -angle;
         }
 
-        // Wrap to [0, 2π)
-        while (angle < 0.0f)    angle += TWO_PI;
-        while (angle >= TWO_PI) angle -= TWO_PI;
+        // Wrap to [-π, π)
+        while (angle < -PI)  angle += TWO_PI;
+        while (angle >= PI)  angle -= TWO_PI;
 
         return angle;
     }
@@ -77,12 +77,20 @@ private:
     float _offsets[3] = {0.0f, 0.0f, 0.0f};
     bool  _invert[3]  = {false, false, false};
 
-    // Read raw angle in radians without calibration or inversion
+    // Read raw angle in radians without calibration or inversion.
+    // Takes 3 ADC samples and returns the median to reject single-sample glitches.
     float _readAngleRaw(uint8_t channel) {
-        int16_t raw = _ads.readADC_SingleEnded(channel);
-        if (raw < 0) raw = 0;
-        float volts = _ads.computeVolts(raw);
-        float angle = (volts / AS5600_VCC) * TWO_PI;
+        float s[3];
+        for (int i = 0; i < 3; i++) {
+            int16_t raw = _ads.readADC_SingleEnded(channel);
+            if (raw < 0) raw = 0;
+            s[i] = (_ads.computeVolts(raw) / AS5600_VCC) * TWO_PI;
+        }
+        // Sort network for 3 elements → s[1] is the median
+        if (s[0] > s[1]) { float t = s[0]; s[0] = s[1]; s[1] = t; }
+        if (s[1] > s[2]) { float t = s[1]; s[1] = s[2]; s[2] = t; }
+        if (s[0] > s[1]) { float t = s[0]; s[0] = s[1]; s[1] = t; }
+        float angle = s[1];
         if (angle < 0.0f)    angle = 0.0f;
         if (angle > TWO_PI)  angle = TWO_PI;
         return angle;

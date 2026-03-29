@@ -33,7 +33,7 @@ from PyQt6.QtWidgets import (
 
 from .bode_widget import BodeWidget
 from .control_panel import MotorControlPanel, PlantParamsPanel
-from .plot_widget import AnglePlotWidget
+from .plot_widget import AnglePlotWidget, _PLOT_WINDOW
 from data.data_buffer import DataBuffer
 from serial_comm.serial_worker import SerialWorker
 from serial_comm.protocol import cmd_start, cmd_stop, cmd_amp, cmd_freq
@@ -51,8 +51,11 @@ class MainWindow(QMainWindow):
         self.resize(1280, 680)
 
         self._worker = SerialWorker(self)
-        self._buffer = DataBuffer(max_seconds=60.0, sample_rate_hz=200.0)
+        self._buffer = DataBuffer(max_seconds=60.0, sample_rate_hz=100.0)
         self._connected = False
+        self._running    = False        # motor running — gates data + plot
+        self._autoscroll = True         # sliding window vs freeze
+        self._t0_ms: float | None = None  # timestamp of first sample in run
 
         # Debounce: send AMP/FREQ 200 ms after last spinbox change
         self._cmd_timer = QTimer(self)
@@ -92,7 +95,7 @@ class MainWindow(QMainWindow):
 
         # Plots side by side — angle plot (wider) | Bode plot
         plots_row = QHBoxLayout()
-        self._plot = AnglePlotWidget(window_seconds=15.0)
+        self._plot = AnglePlotWidget()
         plots_row.addWidget(self._plot, stretch=3)
         self._bode = BodeWidget()
         plots_row.addWidget(self._bode, stretch=2)
@@ -167,6 +170,12 @@ class MainWindow(QMainWindow):
         self._btn_clear = QPushButton("Clear Buffer")
         self._btn_clear.clicked.connect(self._on_clear)
         layout.addWidget(self._btn_clear)
+
+        self._btn_autoscroll = QPushButton("Autoscroll")
+        self._btn_autoscroll.setCheckable(True)
+        self._btn_autoscroll.setChecked(True)
+        self._btn_autoscroll.toggled.connect(self._on_autoscroll_toggled)
+        layout.addWidget(self._btn_autoscroll)
 
         return box
 
@@ -298,12 +307,40 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(object, object, object, object, object)
     def _on_data(self, t_ms, a1, a2, a3, vq) -> None:
+        if not self._running:
+            return   # installation stopped — discard incoming frames
         self._buffer.append_batch(t_ms, a1, a2, a3, vq)
 
     @pyqtSlot()
     def _refresh_plot(self) -> None:
-        t_ms, a1, a2, a3, vq = self._buffer.last_n_seconds(15.0)
-        self._plot.update_data(t_ms, a1, a2, a3, vq)
+        if not self._running:
+            return   # plot is frozen — nothing to redraw
+
+        t_ms, a1, a2, a3, vq = self._buffer.as_arrays()
+        if t_ms.size == 0:
+            return
+
+        if self._t0_ms is None:
+            self._t0_ms = float(t_ms[0])
+
+        t_s     = (t_ms - self._t0_ms) / 1000.0
+        elapsed = float(t_s[-1])
+
+        if elapsed <= _PLOT_WINDOW:
+            # Phase 1: fill left → right, axis fixed at [0, 15 s]
+            self._plot.update_data(t_s, a1, a2, a3, vq,
+                                   x_range=(0.0, _PLOT_WINDOW))
+        elif self._autoscroll:
+            # Phase 2: sliding window — new data on the right
+            lo = elapsed - _PLOT_WINDOW
+            mask = t_s >= lo
+            self._plot.update_data(t_s[mask], a1[mask], a2[mask], a3[mask], vq[mask],
+                                   x_range=(lo, elapsed))
+        # Phase 3: autoscroll OFF + elapsed > window → no-op, plot stays frozen
+
+    @pyqtSlot(bool)
+    def _on_autoscroll_toggled(self, checked: bool) -> None:
+        self._autoscroll = checked
 
     @pyqtSlot()
     def _update_bode(self) -> None:
@@ -316,12 +353,16 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot()
     def _on_start(self) -> None:
+        self._buffer.clear()
+        self._t0_ms  = None
+        self._running = True
         self._send_control_params()
         self._worker.send_command(cmd_start())
         self._motor_ctrl.set_running(True)
 
     @pyqtSlot()
     def _on_stop(self) -> None:
+        self._running = False          # freeze plot and stop accepting data
         self._worker.send_command(cmd_stop())
         self._motor_ctrl.set_running(False)
 

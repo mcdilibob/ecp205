@@ -18,10 +18,12 @@ _COLORS = ("#4e9af1", "#f1884e", "#61c972")   # blue, orange, green
 _DISK_LABELS = ("Disk 1", "Disk 2", "Disk 3")
 
 
+_PLOT_WINDOW = 15.0   # seconds — fixed display window
+
+
 class AnglePlotWidget(pg.PlotWidget):
-    def __init__(self, window_seconds: float = 10.0, parent=None) -> None:
+    def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self._window_s = window_seconds
 
         # Appearance
         self.setBackground("#1e1e1e")
@@ -30,7 +32,8 @@ class AnglePlotWidget(pg.PlotWidget):
         self.setTitle("Disk Angles")
         self.showGrid(x=True, y=True, alpha=0.3)
         self.addLegend(offset=(10, 10))
-        self.setYRange(0, 2 * pi)
+        self.setYRange(-pi, pi)
+        self.setXRange(0.0, _PLOT_WINDOW, padding=0)
         self.setClipToView(True)
         # Even grid: major lines every π/2, minor every π/6
         self.getAxis("left").setTickSpacing(major=pi / 2, minor=pi / 6)
@@ -51,36 +54,22 @@ class AnglePlotWidget(pg.PlotWidget):
         # Lock interaction — no zoom, no pan
         self.getViewBox().setMouseEnabled(x=False, y=False)
 
-    def set_window(self, seconds: float) -> None:
-        self._window_s = max(1.0, seconds)
-
     def update_data(
         self,
-        t_ms: np.ndarray,
+        t_s: np.ndarray,
         a1: np.ndarray,
         a2: np.ndarray,
         a3: np.ndarray,
         vq: np.ndarray,
+        x_range: tuple[float, float] = (0.0, _PLOT_WINDOW),
     ) -> None:
-        """Refresh all curves. Arrays must be the same length."""
-        if t_ms.size == 0:
+        """Refresh all curves. t_s is in seconds (already sliced by caller)."""
+        if t_s.size == 0:
             return
-
-        # Convert to seconds, zero-based for display
-        t_s = (t_ms - t_ms[0]) / 1000.0
-
-        # Rolling window
-        cutoff = t_s[-1] - self._window_s
-        mask = t_s >= cutoff
-        ts = t_s[mask]
-
-        for curve, angles in zip(self._curves, (a1[mask], a2[mask], a3[mask])):
-            curve.setData(ts, angles)
-
-        self._vq_curve.setData(ts, vq[mask])
-
-        # Always show exactly _window_s seconds on the X axis
-        self.setXRange(ts[-1] - self._window_s, ts[-1], padding=0)
+        for curve, angles in zip(self._curves, (a1, a2, a3)):
+            curve.setData(t_s, angles)
+        self._vq_curve.setData(t_s, vq)
+        self.setXRange(x_range[0], x_range[1], padding=0)
 
     def clear_data(self) -> None:
         for curve in self._curves:
