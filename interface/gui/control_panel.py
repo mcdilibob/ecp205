@@ -98,6 +98,7 @@ class MotorControlPanel(QGroupBox):
         self._btn_toggle.setEnabled(not running)
         self._amp_spin.setEnabled(not running)
         self._freq_spin.setEnabled(not running)
+        self._btn_put.setEnabled(True)   # Put Point активен во время и после симуляции
 
     def set_values(self, amp: float, freq: float) -> None:
         """Restore saved values without triggering params_changed."""

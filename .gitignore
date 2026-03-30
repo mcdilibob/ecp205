@@ -5,4 +5,5 @@ references
 interface/gui/__pycache__
 interface/data/__pycache__
 interface/serial_comm/__pycache__
-simulation/__pycache__
+*/__pycache__
+*.pyc
