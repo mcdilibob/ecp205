@@ -40,7 +40,7 @@
 #define AS5600_VCC         5.0f
 
 // Encoder direction inversion (true = reverse direction)
-#define ENCODER_INVERT_DISK1   false
+#define ENCODER_INVERT_DISK1   true
 #define ENCODER_INVERT_DISK2   true    // disk 2 mounted in reverse
 #define ENCODER_INVERT_DISK3   false
 
