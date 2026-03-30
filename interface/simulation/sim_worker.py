@@ -14,9 +14,11 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 from .plant_model import PlantModel
 
-_SIM_DT       = 0.001   # RK4 integration step (s)
-_EMIT_HZ      = 100     # data emission rate — matches firmware DATA_RATE_HZ
-_STEPS        = round(1.0 / (_SIM_DT * _EMIT_HZ))   # steps per emit (= 10)
+_SIM_DT     = 0.001   # RK4 integration step (s) — 1 kHz internal rate
+_DATA_HZ    = 100     # output sample rate (Hz) — matches firmware DATA_RATE_HZ
+_DECIMATION = round(1.0 / (_SIM_DT * _DATA_HZ))   # RK4 steps per output sample (= 10)
+_BATCH      = 10      # output samples per Qt signal emission
+_SLEEP_MS   = round(1000.0 * _BATCH / _DATA_HZ)   # sleep between emits (= 100 ms)
 
 
 class SimWorker(QThread):
@@ -61,26 +63,27 @@ class SimWorker(QThread):
     # ------------------------------------------------------------------
 
     def run(self) -> None:
-        dt_emit_ms = int(round(_STEPS * _SIM_DT * 1000))   # ms to sleep per emit
-
         while self._active:
-            omega = 2.0 * pi * self._freq
+            omega  = 2.0 * pi * self._freq
+            t_arr  = np.empty(_BATCH)
+            a1_arr = np.empty(_BATCH)
+            a2_arr = np.empty(_BATCH)
+            a3_arr = np.empty(_BATCH)
+            vq_arr = np.empty(_BATCH)
 
-            t_arr  = np.empty(_STEPS)
-            a1_arr = np.empty(_STEPS)
-            a2_arr = np.empty(_STEPS)
-            a3_arr = np.empty(_STEPS)
-            vq_arr = np.empty(_STEPS)
-
-            for i in range(_STEPS):
-                tau = self._amp * sin(omega * self._t_sim)
-                a1, a2, a3 = self._model.step(tau)
-                t_arr[i]  = self._t_sim * 1000.0   # ms
-                a1_arr[i] = a1
-                a2_arr[i] = a2
-                a3_arr[i] = a3
-                vq_arr[i] = tau
-                self._t_sim += _SIM_DT
+            for b in range(_BATCH):
+                # Record output timestamp before integration substeps
+                t_arr[b] = self._t_sim * 1000.0   # ms
+                tau = 0.0
+                # Run _DECIMATION RK4 steps to advance one output sample period
+                for _ in range(_DECIMATION):
+                    tau = self._amp * sin(omega * self._t_sim)
+                    a1, a2, a3 = self._model.step(tau)
+                    self._t_sim += _SIM_DT
+                a1_arr[b] = a1
+                a2_arr[b] = a2
+                a3_arr[b] = a3
+                vq_arr[b] = tau
 
             self.data_received.emit(t_arr, a1_arr, a2_arr, a3_arr, vq_arr)
-            self.msleep(dt_emit_ms)
+            self.msleep(_SLEEP_MS)
