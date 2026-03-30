@@ -51,9 +51,11 @@ class MotorControlPanel(QGroupBox):
     # Emitted when amp or freq spinbox value changes (debounce in MainWindow)
     params_changed = pyqtSignal()
 
-    start_requested       = pyqtSignal()
-    stop_requested        = pyqtSignal()
-    put_point_requested   = pyqtSignal()
+    start_requested        = pyqtSignal()
+    stop_requested         = pyqtSignal()
+    sim_start_requested    = pyqtSignal()
+    sim_stop_requested     = pyqtSignal()
+    put_point_requested    = pyqtSignal()
     clear_points_requested = pyqtSignal()
 
     _AMP_MIN,  _AMP_MAX,  _AMP_STEP  = 0.0, 10.0, 0.1
@@ -82,9 +84,20 @@ class MotorControlPanel(QGroupBox):
         self._btn_toggle.setChecked(running)
         self._btn_toggle.setText("Stop Plant" if running else "Start Plant")
         self._btn_toggle.blockSignals(False)
+        self._btn_sim_toggle.setEnabled(not running)
         self._amp_spin.setEnabled(not running)
         self._freq_spin.setEnabled(not running)
         self._btn_put.setEnabled(not running)
+
+    def set_sim_running(self, running: bool) -> None:
+        """Sync sim toggle button state and lock controls while simulation is active."""
+        self._btn_sim_toggle.blockSignals(True)
+        self._btn_sim_toggle.setChecked(running)
+        self._btn_sim_toggle.setText("Stop Model" if running else "Start Model")
+        self._btn_sim_toggle.blockSignals(False)
+        self._btn_toggle.setEnabled(not running)
+        self._amp_spin.setEnabled(not running)
+        self._freq_spin.setEnabled(not running)
 
     def set_values(self, amp: float, freq: float) -> None:
         """Restore saved values without triggering params_changed."""
@@ -101,6 +114,13 @@ class MotorControlPanel(QGroupBox):
             self.start_requested.emit()
         else:
             self.stop_requested.emit()
+
+    def _on_sim_toggle(self, checked: bool) -> None:
+        self._btn_sim_toggle.setText("Stop Model" if checked else "Start Model")
+        if checked:
+            self.sim_start_requested.emit()
+        else:
+            self.sim_stop_requested.emit()
 
     def _build(self) -> None:
         outer = QVBoxLayout(self)
@@ -127,6 +147,12 @@ class MotorControlPanel(QGroupBox):
         self._btn_toggle.setCheckable(True)
         self._btn_toggle.toggled.connect(self._on_toggle)
         btn_row.addWidget(self._btn_toggle)
+
+        self._btn_sim_toggle = QPushButton("Start Model")
+        self._btn_sim_toggle.setObjectName("btn_toggle_model")
+        self._btn_sim_toggle.setCheckable(True)
+        self._btn_sim_toggle.toggled.connect(self._on_sim_toggle)
+        btn_row.addWidget(self._btn_sim_toggle)
 
         self._btn_put = QPushButton("Put Point")
         self._btn_put.clicked.connect(self.put_point_requested)

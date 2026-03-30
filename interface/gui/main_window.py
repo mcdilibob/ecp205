@@ -37,6 +37,7 @@ from .plot_widget import AnglePlotWidget, _PLOT_WINDOW
 from data.data_buffer import DataBuffer
 from serial_comm.serial_worker import SerialWorker
 from serial_comm.protocol import cmd_start, cmd_stop, cmd_amp, cmd_freq
+from simulation.sim_worker import SimWorker
 
 _SETTINGS_ORG = "ECP205"
 _SETTINGS_APP = "FrequencyResponseTool"
@@ -50,10 +51,12 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("ECP205 — Frequency Response Tool")
         self.resize(1280, 680)
 
-        self._worker = SerialWorker(self)
-        self._buffer = DataBuffer(max_seconds=60.0, sample_rate_hz=100.0)
-        self._connected = False
-        self._running    = False        # motor running — gates data + plot
+        self._worker     = SerialWorker(self)
+        self._sim_worker = SimWorker(self)
+        self._buffer     = DataBuffer(max_seconds=60.0, sample_rate_hz=100.0)
+        self._connected  = False
+        self._sim_active = False        # simulation is running
+        self._running    = False        # gates data + plot (plant OR sim)
         self._autoscroll = True         # sliding window vs freeze
         self._t0_ms: float | None = None  # timestamp of first sample in run
 
@@ -255,10 +258,15 @@ class MainWindow(QMainWindow):
         self._worker.connected.connect(self._on_connected)
         self._worker.disconnected.connect(self._on_disconnected)
 
+        # Simulation worker
+        self._sim_worker.data_received.connect(self._on_data)
+
         # Motor control panel
         self._motor_ctrl.params_changed.connect(lambda: self._cmd_timer.start())
         self._motor_ctrl.start_requested.connect(self._on_start)
         self._motor_ctrl.stop_requested.connect(self._on_stop)
+        self._motor_ctrl.sim_start_requested.connect(self._on_sim_start)
+        self._motor_ctrl.sim_stop_requested.connect(self._on_sim_stop)
         self._motor_ctrl.put_point_requested.connect(self._on_put_point)
         self._motor_ctrl.clear_points_requested.connect(self._bode.clear_exp_points)
 
@@ -302,7 +310,8 @@ class MainWindow(QMainWindow):
         self._btn_disconnect.setEnabled(False)
         self._motor_ctrl.set_enabled(False)
         self._set_led(False)
-        self._plot_timer.stop()
+        if not self._sim_active:
+            self._plot_timer.stop()
         self._status_bar.showMessage("Disconnected")
 
     @pyqtSlot(object, object, object, object, object)
@@ -365,6 +374,30 @@ class MainWindow(QMainWindow):
         self._running = False          # freeze plot and stop accepting data
         self._worker.send_command(cmd_stop())
         self._motor_ctrl.set_running(False)
+
+    @pyqtSlot()
+    def _on_sim_start(self) -> None:
+        J1, J2, J3, k1, k2, c1, c2, c3, _ = self._plant_panel.get_params()
+        self._sim_worker.set_params(J1, J2, J3, k1, k2, c1, c2, c3)
+        self._sim_worker.set_excitation(self._motor_ctrl.amp(), self._motor_ctrl.freq())
+        self._buffer.clear()
+        self._t0_ms   = None
+        self._running  = True
+        self._sim_active = True
+        self._sim_worker.start_sim()
+        self._plot_timer.start()
+        self._motor_ctrl.set_sim_running(True)
+        self._status_bar.showMessage("Simulation running")
+
+    @pyqtSlot()
+    def _on_sim_stop(self) -> None:
+        self._running    = False
+        self._sim_active = False
+        self._sim_worker.stop_sim()
+        if not self._connected:
+            self._plot_timer.stop()
+        self._motor_ctrl.set_sim_running(False)
+        self._status_bar.showMessage("Simulation stopped")
 
     @pyqtSlot()
     def _on_export(self) -> None:
