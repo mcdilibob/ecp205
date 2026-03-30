@@ -434,10 +434,12 @@ class MainWindow(QMainWindow):
         if t_ms.size < 4:
             return
 
-        _, _, _, _, _, _, _, _, disk = self._plant_panel.get_params()
-        angles  = (a1, a2, a3)[disk - 1]
-        amp_out = (angles.max() - angles.min()) / 2.0
-        self._bode.add_exp_point(freq, amp_out / amp_in)
+        # Compute amplitude for each disk independently from its own sensor
+        mag1, mag2, mag3 = (
+            (angles.max() - angles.min()) / 2.0 / amp_in
+            for angles in (a1, a2, a3)
+        )
+        self._bode.add_exp_point(freq, mag1, mag2, mag3)
 
     @pyqtSlot()
     def _on_save_plot_png(self) -> None:

@@ -30,6 +30,8 @@ import numpy as np
 import pyqtgraph as pg
 from PyQt6.QtGui import QColor
 
+from .plot_widget import _COLORS   # disk colours shared with the angle plot
+
 _F_MIN = 0.1    # Hz  — start of frequency range
 _F_MAX = 15.0   # Hz  — end of frequency range
 _N_PTS = 5000    # number of frequency points
@@ -94,14 +96,21 @@ class BodeWidget(pg.PlotWidget):
         self._curve = self.plot([], [], pen=pen)
         self._anti_res_lines: list[pg.InfiniteLine] = []
 
-        self._exp_x: list[float] = []
-        self._exp_y: list[float] = []
-        self._exp_scatter = pg.ScatterPlotItem(
-            symbol="o", size=10,
-            pen=pg.mkPen(color=QColor("#61c972"), width=1.5),
-            brush=pg.mkBrush(color=QColor("#61c972")),
-        )
-        self.addItem(self._exp_scatter)
+        # Experimental points stored per disk (index 0 = disk 1, etc.)
+        self._exp_x: list[list[float]] = [[], [], []]
+        self._exp_y: list[list[float]] = [[], [], []]
+        self._current_disk = 1
+
+        # One scatter per disk, coloured to match the angle plot curves
+        self._exp_scatters: list[pg.ScatterPlotItem] = []
+        for color in _COLORS:
+            sc = pg.ScatterPlotItem(
+                symbol="o", size=10,
+                pen=pg.mkPen(color=QColor(color), width=1.5),
+                brush=pg.mkBrush(color=QColor(color)),
+            )
+            self.addItem(sc)
+            self._exp_scatters.append(sc)
 
     def update_tf(
         self,
@@ -110,9 +119,11 @@ class BodeWidget(pg.PlotWidget):
         c1: float, c2: float, c3: float,
         disk: int,
     ) -> None:
+        self._current_disk = disk
         f, mag, N_mag = _compute_tf(J1, J2, J3, k1, k2, c1, c2, c3, disk)
         finite = np.isfinite(mag)
         self._curve.setData(f[finite], mag[finite])
+        self._refresh_scatter()
 
         # Anti-resonances: local minima of |Nᵢ(jω)|
         dN = np.diff(N_mag)
@@ -132,15 +143,26 @@ class BodeWidget(pg.PlotWidget):
             self.addItem(line)
             self._anti_res_lines.append(line)
 
-    def add_exp_point(self, freq: float, magnitude: float) -> None:
-        self._exp_x.append(freq)
-        self._exp_y.append(magnitude)
-        self._exp_scatter.setData(x=self._exp_x, y=self._exp_y)
+    def add_exp_point(self, freq: float, mag1: float, mag2: float, mag3: float) -> None:
+        """Add one experimental point for all three disks at the given frequency."""
+        for i, mag in enumerate((mag1, mag2, mag3)):
+            self._exp_x[i].append(freq)
+            self._exp_y[i].append(mag)
+        self._refresh_scatter()
 
     def clear_exp_points(self) -> None:
-        self._exp_x.clear()
-        self._exp_y.clear()
-        self._exp_scatter.setData(x=[], y=[])
+        for i in range(3):
+            self._exp_x[i].clear()
+            self._exp_y[i].clear()
+        self._refresh_scatter()
+
+    def _refresh_scatter(self) -> None:
+        """Show only the current disk's scatter; hide the others."""
+        for i, sc in enumerate(self._exp_scatters):
+            if i == self._current_disk - 1:
+                sc.setData(x=self._exp_x[i], y=self._exp_y[i])
+            else:
+                sc.setData(x=[], y=[])
 
     def save_png(self, path: str) -> None:
         exporter = pg.exporters.ImageExporter(self.getPlotItem())
