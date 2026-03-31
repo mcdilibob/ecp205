@@ -226,8 +226,8 @@ class MainWindow(QMainWindow):
         self._motor_ctrl.set_values(amp, freq)
 
         # Plant parameters
-        _keys     = ("J1", "J2", "J3", "k1", "k2", "c1", "c2", "c3")
-        _defaults = (0.0024, 0.0019, 0.0019, 2.7, 2.8, 0.0, 0.0, 0.0)
+        _keys     = ("J1", "J2", "J3", "k1", "k2", "k_hw", "c1", "c2", "c3")
+        _defaults = (0.0024, 0.0019, 0.0019, 2.7, 2.8, 1.0, 0.0, 0.0, 0.0)
         vals = [float(s.value(f"plant/{k}", d)) for k, d in zip(_keys, _defaults)]
         disk = int(s.value("plant/disk", 1))
         self._plant_panel.set_params(*vals, disk)
@@ -238,10 +238,10 @@ class MainWindow(QMainWindow):
         s.setValue("connection/baud", self._baud_combo.currentText())
         s.setValue("motor/amp",  self._motor_ctrl.amp())
         s.setValue("motor/freq", self._motor_ctrl.freq())
-        J1, J2, J3, k1, k2, c1, c2, c3, disk = self._plant_panel.get_params()
+        J1, J2, J3, k1, k2, k_hw, c1, c2, c3, disk = self._plant_panel.get_params()
         for key, val in zip(
-            ("J1", "J2", "J3", "k1", "k2", "c1", "c2", "c3"),
-            (J1, J2, J3, k1, k2, c1, c2, c3),
+            ("J1", "J2", "J3", "k1", "k2", "k_hw", "c1", "c2", "c3"),
+            (J1, J2, J3, k1, k2, k_hw, c1, c2, c3),
         ):
             s.setValue(f"plant/{key}", val)
         s.setValue("plant/disk", disk)
@@ -353,8 +353,8 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot()
     def _update_bode(self) -> None:
-        J1, J2, J3, k1, k2, c1, c2, c3, disk = self._plant_panel.get_params()
-        self._bode.update_tf(J1, J2, J3, k1, k2, c1, c2, c3, disk)
+        J1, J2, J3, k1, k2, k_hw, c1, c2, c3, disk = self._plant_panel.get_params()
+        self._bode.update_tf(J1, J2, J3, k1, k2, k_hw, c1, c2, c3, disk)
 
     @pyqtSlot(str)
     def _on_error(self, msg: str) -> None:
@@ -377,8 +377,8 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot()
     def _on_sim_start(self) -> None:
-        J1, J2, J3, k1, k2, c1, c2, c3, _ = self._plant_panel.get_params()
-        self._sim_worker.set_params(J1, J2, J3, k1, k2, c1, c2, c3)
+        J1, J2, J3, k1, k2, k_hw, c1, c2, c3, _ = self._plant_panel.get_params()
+        self._sim_worker.set_params(J1, J2, J3, k1, k2, k_hw, c1, c2, c3)
         self._sim_worker.set_excitation(self._motor_ctrl.amp(), self._motor_ctrl.freq())
         self._buffer.clear()
         self._t0_ms   = None

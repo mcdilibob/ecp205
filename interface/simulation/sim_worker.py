@@ -30,6 +30,7 @@ class SimWorker(QThread):
         self._model   = PlantModel(0.0024, 0.0019, 0.0019, 2.7, 2.8, 0.0, 0.0, 0.0)
         self._amp     = 1.0    # N·m  (treated same as Vq amplitude)
         self._freq    = 1.0    # Hz
+        self._k_hw    = 1.0    # hardware gain correction factor
         self._active  = False  # loop control flag
 
     # ------------------------------------------------------------------
@@ -40,9 +41,11 @@ class SimWorker(QThread):
         self,
         J1: float, J2: float, J3: float,
         k1: float, k2: float,
+        k_hw: float,
         c1: float, c2: float, c3: float,
     ) -> None:
         self._model.set_params(J1, J2, J3, k1, k2, c1, c2, c3)
+        self._k_hw = k_hw
 
     def set_excitation(self, amp: float, freq: float) -> None:
         self._amp  = amp
@@ -77,7 +80,7 @@ class SimWorker(QThread):
                 tau = 0.0
                 # Run _DECIMATION RK4 steps to advance one output sample period
                 for _ in range(_DECIMATION):
-                    tau = self._amp * sin(omega * self._t_sim)
+                    tau = self._amp / self._k_hw * sin(omega * self._t_sim)
                     a1, a2, a3 = self._model.step(tau)
                     self._t_sim += _SIM_DT
                 a1_arr[b] = a1

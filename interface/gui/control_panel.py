@@ -176,19 +176,20 @@ class PlantParamsPanel(QGroupBox):
     params_changed = pyqtSignal()
 
     _PARAMS = [
-        ("J₁", 0.0001, 1.0,   0.0001, 4, 0.0024),
-        ("J₂", 0.0001, 1.0,   0.0001, 4, 0.0019),
-        ("J₃", 0.0001, 1.0,   0.0001, 4, 0.0019),
-        ("k₁", 0.01,   200.0, 0.01,   2, 2.7),
-        ("k₂", 0.01,   200.0, 0.01,   2, 2.8),
-        ("c₁", 0.0,    10.0,  0.001,  4, 0.0),
-        ("c₂", 0.0,    10.0,  0.001,  4, 0.0),
-        ("c₃", 0.0,    10.0,  0.001,  4, 0.0),
+        ("J₁",   0.0001, 1.0,   0.0001, 4, 0.0024),
+        ("J₂",   0.0001, 1.0,   0.0001, 4, 0.0019),
+        ("J₃",   0.0001, 1.0,   0.0001, 4, 0.0019),
+        ("k₁",   0.01,   200.0, 0.01,   2, 2.7),
+        ("k₂",   0.01,   200.0, 0.01,   2, 2.8),
+        ("k_hw", 0.001,  10.0,  0.001,  3, 1.0),
+        ("c₁",   0.0,    10.0,  0.001,  4, 0.0),
+        ("c₂",   0.0,    10.0,  0.001,  4, 0.0),
+        ("c₃",   0.0,    10.0,  0.001,  4, 0.0),
     ]
-    # Layout positions: (row, col) for each of the 8 params
+    # Layout positions: (row, col) for each of the 9 params
     _POSITIONS = [
         (0, 0), (0, 2), (0, 4),   # J₁ J₂ J₃
-        (1, 0), (1, 2),            # k₁ k₂
+        (1, 0), (1, 2), (1, 4),   # k₁ k₂ k_hw
         (2, 0), (2, 2), (2, 4),   # c₁ c₂ c₃
     ]
 
@@ -199,20 +200,21 @@ class PlantParamsPanel(QGroupBox):
     # ---- public API ----
 
     def get_params(self) -> tuple[float, float, float, float, float,
-                                   float, float, float, int]:
-        """Return (J1, J2, J3, k1, k2, c1, c2, c3, disk)."""
-        J1, J2, J3, k1, k2, c1, c2, c3 = (s.value() for s in self._spins)
-        return J1, J2, J3, k1, k2, c1, c2, c3, self._disk_group.checkedId()
+                                   float, float, float, float, int]:
+        """Return (J1, J2, J3, k1, k2, k_hw, c1, c2, c3, disk)."""
+        J1, J2, J3, k1, k2, k_hw, c1, c2, c3 = (s.value() for s in self._spins)
+        return J1, J2, J3, k1, k2, k_hw, c1, c2, c3, self._disk_group.checkedId()
 
     def set_params(
         self,
         J1: float, J2: float, J3: float,
         k1: float, k2: float,
+        k_hw: float,
         c1: float, c2: float, c3: float,
         disk: int,
     ) -> None:
         """Restore saved values without triggering params_changed."""
-        for spin, val in zip(self._spins, (J1, J2, J3, k1, k2, c1, c2, c3)):
+        for spin, val in zip(self._spins, (J1, J2, J3, k1, k2, k_hw, c1, c2, c3)):
             spin.blockSignals(True)
             spin.setValue(val)
             spin.blockSignals(False)

@@ -119,11 +119,13 @@ class BodeWidget(pg.PlotWidget):
         self,
         J1: float, J2: float, J3: float,
         k1: float, k2: float,
+        k_hw: float,
         c1: float, c2: float, c3: float,
         disk: int,
     ) -> None:
         self._current_disk = disk
         f, mag, N_mag = _compute_tf(J1, J2, J3, k1, k2, c1, c2, c3, disk)
+        mag = mag / k_hw
         finite = np.isfinite(mag)
         self._curve.setData(f[finite], mag[finite])
         self._refresh_scatter()
