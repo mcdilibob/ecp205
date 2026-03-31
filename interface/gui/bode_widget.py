@@ -108,6 +108,9 @@ class BodeWidget(pg.PlotWidget):
                 symbol="o", size=10,
                 pen=pg.mkPen(color=QColor(color), width=1.5),
                 brush=pg.mkBrush(color=QColor(color)),
+                hoverable=True,
+                hoverSize=14,
+                tip=lambda x, y, data: f"{x:.3f} Hz\n|H| = {y:.4f}",
             )
             self.addItem(sc)
             self._exp_scatters.append(sc)
