@@ -428,17 +428,22 @@ class MainWindow(QMainWindow):
         if amp_in == 0.0:
             return
 
-        # Use at least 3 full periods, minimum 2 s
-        window = max(2.0, 3.0 / freq)
+        # Use at least 5 full periods, minimum 2 s — more periods → sharper FFT bin
+        window = max(2.0, 5.0 / freq)
         t_ms, a1, a2, a3, _ = self._buffer.last_n_seconds(window)
         if t_ms.size < 4:
             return
 
-        # Compute amplitude for each disk independently from its own sensor
-        mag1, mag2, mag3 = (
-            (angles.max() - angles.min()) / 2.0 / amp_in
-            for angles in (a1, a2, a3)
-        )
+        # Compute amplitude via FFT at the excitation frequency bin
+        dt = float(np.median(np.diff(t_ms))) / 1000.0  # s, robust to jitter
+        n  = len(t_ms)
+        fft_freqs = np.fft.rfftfreq(n, dt)
+        bin_idx   = int(np.argmin(np.abs(fft_freqs - freq)))
+
+        def _fft_mag(sig: np.ndarray) -> float:
+            return 2.0 * float(np.abs(np.fft.rfft(sig)[bin_idx])) / n / amp_in
+
+        mag1, mag2, mag3 = _fft_mag(a1), _fft_mag(a2), _fft_mag(a3)
         self._bode.add_exp_point(freq, mag1, mag2, mag3)
 
     @pyqtSlot()

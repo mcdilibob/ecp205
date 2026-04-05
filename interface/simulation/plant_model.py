@@ -67,7 +67,7 @@ class PlantModel:
         self._x += h / 6 * (k1 + 2*k2 + 2*k3 + k4)
 
         # wrap angles to [-π, π]
-        a1 = (self._x[0] + pi) % (2 * pi) - pi
-        a2 = (self._x[2] + pi) % (2 * pi) - pi
-        a3 = (self._x[4] + pi) % (2 * pi) - pi
-        return a1, a2, a3
+        a1 = self._x[0]
+        a2 = self._x[2]
+        a3 = self._x[4]
+        return [a1, a2, a3]
