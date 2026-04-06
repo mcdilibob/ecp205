@@ -232,19 +232,35 @@ class MainWindow(QMainWindow):
         disk = int(s.value("plant/disk", 1))
         self._plant_panel.set_params(*vals, disk)
 
+        # Weights
+        _wkeys    = ("n1", "r1", "n2", "r2", "n3", "r3")
+        _wdefs    = (0, 6.0, 0, 6.0, 0, 6.0)
+        wvals = [float(s.value(f"weights/{k}", d)) for k, d in zip(_wkeys, _wdefs)]
+        self._plant_panel.set_weight_config(
+            int(wvals[0]), wvals[1], int(wvals[2]), wvals[3], int(wvals[4]), wvals[5]
+        )
+
     def closeEvent(self, event) -> None:
         s = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
         s.setValue("connection/port", self._port_combo.currentText())
         s.setValue("connection/baud", self._baud_combo.currentText())
         s.setValue("motor/amp",  self._motor_ctrl.amp())
         s.setValue("motor/freq", self._motor_ctrl.freq())
-        J1, J2, J3, k1, k2, k_hw, c1, c2, c3, disk = self._plant_panel.get_params()
+        # Save base J values (spins), not effective — weights are saved separately
+        base_J1 = self._plant_panel._spins[0].value()
+        base_J2 = self._plant_panel._spins[1].value()
+        base_J3 = self._plant_panel._spins[2].value()
+        _, _, _, k1, k2, k_hw, c1, c2, c3, disk = self._plant_panel.get_params()
         for key, val in zip(
             ("J1", "J2", "J3", "k1", "k2", "k_hw", "c1", "c2", "c3"),
-            (J1, J2, J3, k1, k2, k_hw, c1, c2, c3),
+            (base_J1, base_J2, base_J3, k1, k2, k_hw, c1, c2, c3),
         ):
             s.setValue(f"plant/{key}", val)
         s.setValue("plant/disk", disk)
+
+        n1, r1, n2, r2, n3, r3 = self._plant_panel.get_weight_config()
+        for key, val in zip(("n1", "r1", "n2", "r2", "n3", "r3"), (n1, r1, n2, r2, n3, r3)):
+            s.setValue(f"weights/{key}", val)
         super().closeEvent(event)
 
     # -------------------------------------------------------------------------

@@ -12,6 +12,7 @@ from __future__ import annotations
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
     QButtonGroup,
+    QComboBox,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -171,9 +172,11 @@ class MotorControlPanel(QGroupBox):
 # ---------------------------------------------------------------------------
 
 class PlantParamsPanel(QGroupBox):
-    """Plant parameter spinboxes (J, k, c) and output disk selector."""
+    """Plant parameter spinboxes (J, k, c), weight controls, and output disk selector."""
 
     params_changed = pyqtSignal()
+
+    _WEIGHT_MASS = 0.5   # kg, mass of one weight disk
 
     _PARAMS = [
         ("J₁",   0.0001, 1.0,   0.0001, 4, 0.0024),
@@ -201,9 +204,31 @@ class PlantParamsPanel(QGroupBox):
 
     def get_params(self) -> tuple[float, float, float, float, float,
                                    float, float, float, float, int]:
-        """Return (J1, J2, J3, k1, k2, k_hw, c1, c2, c3, disk)."""
+        """Return (J1_eff, J2_eff, J3_eff, k1, k2, k_hw, c1, c2, c3, disk).
+
+        J_i_eff = J_i (base) + n_i * m * r_i²
+        """
         J1, J2, J3, k1, k2, k_hw, c1, c2, c3 = (s.value() for s in self._spins)
-        return J1, J2, J3, k1, k2, k_hw, c1, c2, c3, self._disk_group.checkedId()
+        J1_eff, J2_eff, J3_eff = self._effective_J(J1, J2, J3)
+        return J1_eff, J2_eff, J3_eff, k1, k2, k_hw, c1, c2, c3, self._disk_group.checkedId()
+
+    def get_weight_config(self) -> tuple[int, float, int, float, int, float]:
+        """Return (n1, r1_cm, n2, r2_cm, n3, r3_cm) — raw weight config for persistence."""
+        return tuple(
+            val
+            for cb, sb in self._weight_controls
+            for val in (cb.currentData(), sb.value())
+        )
+
+    def set_weight_config(self, n1: int, r1: float, n2: int, r2: float, n3: int, r3: float) -> None:
+        """Restore weight config without triggering params_changed."""
+        for (cb, sb), n, r in zip(self._weight_controls, (n1, n2, n3), (r1, r2, r3)):
+            cb.blockSignals(True)
+            sb.blockSignals(True)
+            cb.setCurrentIndex(cb.findData(n))
+            sb.setValue(r)
+            cb.blockSignals(False)
+            sb.blockSignals(False)
 
     def set_params(
         self,
@@ -213,7 +238,7 @@ class PlantParamsPanel(QGroupBox):
         c1: float, c2: float, c3: float,
         disk: int,
     ) -> None:
-        """Restore saved values without triggering params_changed."""
+        """Restore base J/k/c values without triggering params_changed."""
         for spin, val in zip(self._spins, (J1, J2, J3, k1, k2, k_hw, c1, c2, c3)):
             spin.blockSignals(True)
             spin.setValue(val)
@@ -226,6 +251,14 @@ class PlantParamsPanel(QGroupBox):
                 break
 
     # ---- internal ----
+
+    def _effective_J(self, J1: float, J2: float, J3: float) -> tuple[float, float, float]:
+        result = []
+        for J, (cb, sb) in zip((J1, J2, J3), self._weight_controls):
+            n = cb.currentData()
+            r = sb.value() / 100.0   # cm → m
+            result.append(J + n * self._WEIGHT_MASS * r ** 2)
+        return tuple(result)
 
     def _build(self) -> None:
         outer = QVBoxLayout(self)
@@ -245,6 +278,29 @@ class PlantParamsPanel(QGroupBox):
             self._spins.append(sb)
 
         outer.addLayout(grid)
+
+        # Weight controls: one row per disk
+        weight_grid = QGridLayout()
+        weight_grid.setHorizontalSpacing(6)
+        weight_grid.setVerticalSpacing(2)
+        self._weight_controls: list[tuple[QComboBox, NoScrollDoubleSpinBox]] = []
+        for i in range(3):
+            weight_grid.addWidget(QLabel(f"Диск {i+1}: грузы"), i, 0)
+            cb = QComboBox()
+            for n in (0, 2, 4):
+                cb.addItem(str(n), n)
+            cb.setFixedWidth(55)
+            cb.currentIndexChanged.connect(self.params_changed)
+            weight_grid.addWidget(cb, i, 1)
+
+            weight_grid.addWidget(QLabel("r (см):"), i, 2)
+            r_spin = _make_spinbox(0.1, 30.0, 0.1, 1, 6.0, width=60)
+            r_spin.valueChanged.connect(self.params_changed)
+            weight_grid.addWidget(r_spin, i, 3)
+
+            self._weight_controls.append((cb, r_spin))
+
+        outer.addLayout(weight_grid)
 
         disk_row = QHBoxLayout()
         disk_row.addWidget(QLabel("АЧХ диска:"))
