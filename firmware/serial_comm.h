@@ -7,13 +7,13 @@
 // Serial communication — command parser
 //
 // PC → MCU protocol (text, newline-terminated):
-//   AMP:<value>\n    set sine wave amplitude in volts (0.0 – MOTOR_VOLTAGE_LIMIT)
-//   FREQ:<value>\n   set sine wave frequency in Hz   (0.0 – 20.0)
+//   AMP:<value>\n    set sine wave amplitude in amps (0.0 – MOTOR_CURRENT_LIMIT)
+//   FREQ:<value>\n   set sine wave frequency in Hz  (0.0 – 20.0)
 //   START\n          enable motor output
 //   STOP\n           disable motor output
 //
 // MCU → PC protocol:
-//   DATA:<ms>:<d1>:<d2>:<d3>:<vq>\n   sent at DATA_RATE_HZ
+//   DATA:<ms>:<d1>:<d2>:<d3>:<iq>\n   sent at DATA_RATE_HZ  (iq in A)
 //   ERR:<message>\n                   on error (e.g. ADS not found)
 // =============================================================================
 
@@ -40,7 +40,7 @@ inline void serial_comm_update() {
                 g_running = false;
             } else if (strncmp(buf, "AMP:", 4) == 0) {
                 float v = atof(buf + 4);
-                if (v >= 0.0f && v <= MOTOR_VOLTAGE_LIMIT)
+                if (v >= 0.0f && v <= MOTOR_CURRENT_LIMIT)
                     g_amplitude = v;
             } else if (strncmp(buf, "FREQ:", 5) == 0) {
                 float f = atof(buf + 5);
@@ -58,7 +58,7 @@ inline void serial_comm_update() {
 // Send one DATA frame
 inline void serial_send_data(uint32_t ts_ms,
                               float a1, float a2, float a3,
-                              float vq) {
+                              float u) {
     Serial.print("DATA:");
     Serial.print(ts_ms);
     Serial.print(':');
@@ -68,7 +68,7 @@ inline void serial_send_data(uint32_t ts_ms,
     Serial.print(':');
     Serial.print(a3, 4);
     Serial.print(':');
-    Serial.println(vq, 3);
+    Serial.println(u, 4);
 }
 
 // Send an error string

@@ -19,7 +19,7 @@ def main() -> None:
     pg.setConfigOptions(antialias=True, foreground="w", background="#1e1e2e")
 
     app = QApplication(sys.argv)
-    app.setApplicationName("ECP205 Frequency Response Tool")
+    app.setApplicationName("ECP205 Plant Interface")
     app.setStyle("Fusion")
     app.setStyleSheet(DARK_THEME)
 

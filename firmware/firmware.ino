@@ -24,7 +24,7 @@
 
 // --- Global state (shared with serial_comm.h) --------------------------------
 volatile bool  g_running   = false;
-volatile float g_amplitude = 1.0f;   // V
+volatile float g_amplitude = 1.0f;   // A (commanded peak current)
 volatile float g_frequency = 1.0f;   // Hz
 
 // --- SimpleFOC objects -------------------------------------------------------
@@ -34,8 +34,9 @@ void doA() { hall.handleA(); }
 void doB() { hall.handleB(); }
 void doC() { hall.handleC(); }
 
-BLDCDriver3PWM driver(PIN_PWM_A, PIN_PWM_B, PIN_PWM_C);
-BLDCMotor      motor(MOTOR_POLE_PAIRS);
+BLDCDriver3PWM    driver(PIN_PWM_A, PIN_PWM_B, PIN_PWM_C);
+BLDCMotor         motor(MOTOR_POLE_PAIRS);
+InlineCurrentSense current_sense(45.0, PIN_CS_A, PIN_CS_B, PIN_CS_C);
 
 // --- Encoder reader ----------------------------------------------------------
 EncoderReader encoders;
@@ -73,15 +74,27 @@ void setup() {
         while (1) {}
     }
 
-    // BLDC motor — voltage/torque mode (Vq = target)
+    // BLDC motor — FOC current mode (Iq = target, torque ∝ Iq)
     motor.linkSensor(&hall);
     motor.linkDriver(&driver);
-    motor.torque_controller = TorqueControlType::voltage;
+    motor.torque_controller = TorqueControlType::foc_current;
     motor.controller        = MotionControlType::torque;
-    motor.voltage_limit     = MOTOR_VOLTAGE_LIMIT;
+//   motor.phase_resistance  = PHASE_RESISTANCE;
+//    motor.KV_rating         = MOTOR_KV;
+    motor.voltage_limit     = MOTOR_VOLTAGE_LIMIT;  // output voltage cap for current PI
+    motor.current_limit     = MOTOR_CURRENT_LIMIT;
     motor.velocity_limit    = 200.0f;  // rad/s — safety cap
 
     motor.init();
+
+    // Current sense must be linked after driver.init() and motor.init()
+    current_sense.linkDriver(&driver);
+    if (!current_sense.init()) {
+        serial_send_error("current sense init failed");
+        // Continue — motor can run without current sense (falls back to voltage mode internally)
+    }
+    motor.linkCurrentSense(&current_sense);
+
     motor.initFOC();
 
     // ADS1115 + AS5600 encoders
@@ -115,20 +128,20 @@ void loop() {
     float a1, a2, a3;
     encoders.readAll(a1, a2, a3);
 
-    // 3. Compute sine wave voltage target
+    // 3. Compute sine wave current target (Iq)
     uint32_t now_ms = millis();
-    float vq = 0.0f;
+    float iq = 0.0f;
     if (g_running && g_amplitude > 0.0f) {
         float t = now_ms * 1e-3f;
-        vq = g_amplitude * sinf(TWO_PI * g_frequency * t);
+        iq = g_amplitude * sinf(TWO_PI * g_frequency * t);
     }
 
-    // 4. Apply to motor (SimpleFOC torque mode: target = Vq)
-    motor.move(vq);
+    // 4. Apply to motor (SimpleFOC foc_current mode: target = Iq in A)
+    motor.move(iq);
 
     // 5. Transmit data at DATA_RATE_HZ
     if ((now_ms - last_data_ms) >= (1000u / DATA_RATE_HZ)) {
         last_data_ms = now_ms;
-        serial_send_data(now_ms, a1, a2, a3, vq);
+        serial_send_data(now_ms, a1, a2, a3, iq);
     }
 }

@@ -4,7 +4,7 @@ gui/main_window.py — ECP205 GUI main window (PyQt6).
 Layout:
   ┌─ Serial Connection ─────────────────────────────────────────────────────┐
   ├──────────────────────────────────┬──────────────────────────────────────┤
-  │   Angle plot (real-time)         │   АЧХ / Bode magnitude plot          │
+  │   Angle plot (real-time)         │   Bode magnitude plot                │
   ├──────────────────────────────────┴──────────────────────────────────────┤
   │ [Motor Control]  [Plant Parameters J/k/c + disk selector]               │
   └─────────────────────────────────────────────────────────────────────────┘
@@ -27,12 +27,14 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QStatusBar,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from .bode_widget import BodeWidget
 from .control_panel import MotorControlPanel, PlantParamsPanel
+from .ident_widget import IdentWidget
 from .plot_widget import AnglePlotWidget, _PLOT_WINDOW
 from data.data_buffer import DataBuffer
 from serial_comm.serial_worker import SerialWorker
@@ -96,15 +98,23 @@ class MainWindow(QMainWindow):
 
         root.addWidget(self._build_connection_bar())
 
-        # Plots side by side — angle plot (wider) | Bode plot
+        # ── tab widget ────────────────────────────────────────────────────────
+        self._tabs = QTabWidget()
+        root.addWidget(self._tabs, stretch=1)
+
+        # Tab 1: Frequency Response (existing layout)
+        ach_page = QWidget()
+        ach_lay  = QVBoxLayout(ach_page)
+        ach_lay.setSpacing(6)
+        ach_lay.setContentsMargins(0, 4, 0, 0)
+
         plots_row = QHBoxLayout()
         self._plot = AnglePlotWidget()
         plots_row.addWidget(self._plot, stretch=3)
         self._bode = BodeWidget()
         plots_row.addWidget(self._bode, stretch=2)
-        root.addLayout(plots_row, stretch=1)
+        ach_lay.addLayout(plots_row, stretch=1)
 
-        # Bottom controls row
         self._motor_ctrl  = MotorControlPanel()
         self._plant_panel = PlantParamsPanel()
         ctrl_row = QHBoxLayout()
@@ -112,7 +122,14 @@ class MainWindow(QMainWindow):
         ctrl_row.addWidget(self._motor_ctrl)
         ctrl_row.addWidget(self._plant_panel)
         ctrl_row.addStretch()
-        root.addLayout(ctrl_row)
+        ach_lay.addLayout(ctrl_row)
+
+        self._tabs.addTab(ach_page, "Frequency Response")
+
+        # Tab 2: Parameter Identification
+        self._ident_widget = IdentWidget()
+        self._ident_widget.params_identified.connect(self._on_apply_identified)
+        self._tabs.addTab(self._ident_widget, "Parameter Identification")
 
         self._status_bar = QStatusBar()
         self.setStatusBar(self._status_bar)
@@ -141,7 +158,7 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(QLabel("Baud:"))
         self._baud_combo = QComboBox()
-        for b in ("115200", "57600"):
+        for b in ("500000", "115200", "57600"):
             self._baud_combo.addItem(b)
         layout.addWidget(self._baud_combo)
 
@@ -212,7 +229,7 @@ class MainWindow(QMainWindow):
 
         # Connection
         port = s.value("connection/port", self._DEFAULT_PORT)
-        baud = s.value("connection/baud", "115200")
+        baud = s.value("connection/baud", "500000")
         idx = self._port_combo.findText(port)
         if idx >= 0:
             self._port_combo.setCurrentIndex(idx)
@@ -270,6 +287,7 @@ class MainWindow(QMainWindow):
     def _connect_signals(self) -> None:
         # Serial worker
         self._worker.data_received.connect(self._on_data)
+        self._worker.data_received.connect(self._ident_widget.on_live_data)
         self._worker.error_occurred.connect(self._on_error)
         self._worker.connected.connect(self._on_connected)
         self._worker.disconnected.connect(self._on_disconnected)
@@ -331,17 +349,17 @@ class MainWindow(QMainWindow):
         self._status_bar.showMessage("Disconnected")
 
     @pyqtSlot(object, object, object, object, object)
-    def _on_data(self, t_ms, a1, a2, a3, vq) -> None:
+    def _on_data(self, t_ms, a1, a2, a3, u) -> None:
         if not self._running:
             return   # installation stopped — discard incoming frames
-        self._buffer.append_batch(t_ms, a1, a2, a3, vq)
+        self._buffer.append_batch(t_ms, a1, a2, a3, u)
 
     @pyqtSlot()
     def _refresh_plot(self) -> None:
         if not self._running:
             return   # plot is frozen — nothing to redraw
 
-        t_ms, a1, a2, a3, vq = self._buffer.as_arrays()
+        t_ms, a1, a2, a3, u = self._buffer.as_arrays()
         if t_ms.size == 0:
             return
 
@@ -353,13 +371,13 @@ class MainWindow(QMainWindow):
 
         if elapsed <= _PLOT_WINDOW:
             # Phase 1: fill left → right, axis fixed at [0, 15 s]
-            self._plot.update_data(t_s, a1, a2, a3, vq,
+            self._plot.update_data(t_s, a1, a2, a3, u,
                                    x_range=(0.0, _PLOT_WINDOW))
         elif self._autoscroll:
             # Phase 2: sliding window — new data on the right
             lo = elapsed - _PLOT_WINDOW
             mask = t_s >= lo
-            self._plot.update_data(t_s[mask], a1[mask], a2[mask], a3[mask], vq[mask],
+            self._plot.update_data(t_s[mask], a1[mask], a2[mask], a3[mask], u[mask],
                                    x_range=(lo, elapsed))
         # Phase 3: autoscroll OFF + elapsed > window → no-op, plot stays frozen
 
@@ -436,6 +454,7 @@ class MainWindow(QMainWindow):
     def _on_clear(self) -> None:
         self._buffer.clear()
         self._plot.clear_data()
+        self._ident_widget.clear_all_buffers()
 
     @pyqtSlot()
     def _on_put_point(self) -> None:
@@ -485,3 +504,37 @@ class MainWindow(QMainWindow):
             return
         self._worker.send_command(cmd_amp(self._motor_ctrl.amp()))
         self._worker.send_command(cmd_freq(self._motor_ctrl.freq()))
+
+    @pyqtSlot(int, float, float, float)
+    def _on_apply_identified(self, disk: int, J: float, k: float, c: float) -> None:
+        """Apply identified (J, k, c) for disk 1 or 3 to the plant params panel.
+
+        disk 1 → J₁, k₁, c₁
+        disk 3 → J₃, k₂, c₃
+        """
+        # Read current base spin values (not effective — weights handled separately)
+        spins = self._plant_panel._spins  # [J1, J2, J3, k1, k2, k_hw, c1, c2, c3]
+        J1    = spins[0].value()
+        J2    = spins[1].value()
+        J3    = spins[2].value()
+        k1    = spins[3].value()
+        k2    = spins[4].value()
+        k_hw  = spins[5].value()
+        c1    = spins[6].value()
+        c2    = spins[7].value()
+        c3    = spins[8].value()
+        _, _, _, _, _, _, _, _, _, disk_sel = self._plant_panel.get_params()
+
+        if disk == 1:
+            J1, k1, c1 = J, k, c
+        else:  # disk == 3
+            J3, k2, c3 = J, k, c
+            J2, c2 = J, c  # k2 is shared between disk 1 and 3
+
+
+        self._plant_panel.set_params(J1, J2, J3, k1, k2, k_hw, c1, c2, c3, disk_sel)
+        # Trigger Bode redraw
+        self._bode_timer.start()
+        self._status_bar.showMessage(
+            f"Identification applied: disk {disk} → J={J:.5f}, k={k:.4f}, c={c:.5f}"
+        )

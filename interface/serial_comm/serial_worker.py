@@ -13,7 +13,7 @@ from 200/s to ~20/s.
 from __future__ import annotations
 
 import collections
-import threading
+import threading                                                        
 
 import numpy as np
 import serial
@@ -21,13 +21,13 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 from .protocol import parse_data
 
-# Emit one signal per this many samples (100 Hz / 5 = 20 Hz signal rate)
-_BATCH_SIZE = 5
+# Emit one signal per this many samples (200 Hz / 10 = 20 Hz signal rate)
+_BATCH_SIZE = 1
 
 
 class SerialWorker(QThread):
     # Emitted in batches: five equal-length 1-D float64 arrays
-    #   (t_ms, angle1_rad, angle2_rad, angle3_rad, vq_V)
+    #   (t_ms, angle1_rad, angle2_rad, angle3_rad, iq_A)
     data_received = pyqtSignal(object, object, object, object, object)
 
     # Emitted when an ERR: frame arrives or a serial exception occurs
@@ -88,7 +88,7 @@ class SerialWorker(QThread):
         batch_a1 = np.empty(_BATCH_SIZE, dtype=np.float64)
         batch_a2 = np.empty(_BATCH_SIZE, dtype=np.float64)
         batch_a3 = np.empty(_BATCH_SIZE, dtype=np.float64)
-        batch_vq = np.empty(_BATCH_SIZE, dtype=np.float64)
+        batch_u  = np.empty(_BATCH_SIZE, dtype=np.float64)
         batch_i  = 0
 
         try:
@@ -115,14 +115,14 @@ class SerialWorker(QThread):
                         batch_a1[batch_i] = a1
                         batch_a2[batch_i] = a2
                         batch_a3[batch_i] = a3
-                        batch_vq[batch_i] = vq
+                        batch_u[batch_i] = vq
                         batch_i += 1
 
                         if batch_i == _BATCH_SIZE:
                             self.data_received.emit(
                                 batch_t.copy(), batch_a1.copy(),
                                 batch_a2.copy(), batch_a3.copy(),
-                                batch_vq.copy(),
+                                batch_u.copy(),
                             )
                             batch_i = 0
 

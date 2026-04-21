@@ -6,4 +6,4 @@ interface/gui/__pycache__
 interface/data/__pycache__
 interface/serial_comm/__pycache__
 */__pycache__
-*.pyc
+*/__pycache__/*.pyc

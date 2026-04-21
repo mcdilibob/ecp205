@@ -59,7 +59,7 @@ class MotorControlPanel(QGroupBox):
     put_point_requested    = pyqtSignal()
     clear_points_requested = pyqtSignal()
 
-    _AMP_MIN,  _AMP_MAX,  _AMP_STEP  = 0.0, 10.0, 0.1
+    _AMP_MIN,  _AMP_MAX,  _AMP_STEP  = 0.0, 5.0, 0.1
     _FREQ_MIN, _FREQ_MAX, _FREQ_STEP = 0.1, 20.0, 0.1
 
     def __init__(self, parent=None) -> None:
@@ -99,7 +99,7 @@ class MotorControlPanel(QGroupBox):
         self._btn_toggle.setEnabled(not running)
         self._amp_spin.setEnabled(not running)
         self._freq_spin.setEnabled(not running)
-        self._btn_put.setEnabled(True)   # Put Point активен во время и после симуляции
+        self._btn_put.setEnabled(True)   # Put Point is active during and after simulation
 
     def set_values(self, amp: float, freq: float) -> None:
         """Restore saved values without triggering params_changed."""
@@ -136,7 +136,7 @@ class MotorControlPanel(QGroupBox):
         self._amp_spin.valueChanged.connect(self.params_changed)
         self._freq_spin.valueChanged.connect(self.params_changed)
 
-        grid.addWidget(QLabel("Amplitude (V):"),  0, 0)
+        grid.addWidget(QLabel("Amplitude (A):"),  0, 0)
         grid.addWidget(self._amp_spin,             0, 1)
         grid.addWidget(QLabel("Frequency (Hz):"), 1, 0)
         grid.addWidget(self._freq_spin,            1, 1)
@@ -285,7 +285,7 @@ class PlantParamsPanel(QGroupBox):
         weight_grid.setVerticalSpacing(2)
         self._weight_controls: list[tuple[QComboBox, NoScrollDoubleSpinBox]] = []
         for i in range(3):
-            weight_grid.addWidget(QLabel(f"Диск {i+1}: грузы"), i, 0)
+            weight_grid.addWidget(QLabel(f"Disk {i+1}: weights"), i, 0)
             cb = QComboBox()
             for n in (0, 2, 4):
                 cb.addItem(str(n), n)
@@ -293,7 +293,7 @@ class PlantParamsPanel(QGroupBox):
             cb.currentIndexChanged.connect(self.params_changed)
             weight_grid.addWidget(cb, i, 1)
 
-            weight_grid.addWidget(QLabel("r (см):"), i, 2)
+            weight_grid.addWidget(QLabel("r (cm):"), i, 2)
             r_spin = _make_spinbox(0.1, 30.0, 0.1, 1, 6.0, width=60)
             r_spin.valueChanged.connect(self.params_changed)
             weight_grid.addWidget(r_spin, i, 3)
@@ -303,7 +303,7 @@ class PlantParamsPanel(QGroupBox):
         outer.addLayout(weight_grid)
 
         disk_row = QHBoxLayout()
-        disk_row.addWidget(QLabel("АЧХ диска:"))
+        disk_row.addWidget(QLabel("Bode disk:"))
         self._disk_group = QButtonGroup(self)
         for i, label in enumerate(("1", "2", "3"), start=1):
             rb = QRadioButton(label)

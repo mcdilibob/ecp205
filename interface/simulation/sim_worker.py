@@ -15,7 +15,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from .plant_model import PlantModel
 
 _SIM_DT     = 0.001   # RK4 integration step (s) — 1 kHz internal rate
-_DATA_HZ    = 100     # output sample rate (Hz) — matches firmware DATA_RATE_HZ
+_DATA_HZ    = 200     # output sample rate (Hz) — matches firmware DATA_RATE_HZ
 _DECIMATION = round(1.0 / (_SIM_DT * _DATA_HZ))   # RK4 steps per output sample (= 10)
 _BATCH      = 10      # output samples per Qt signal emission
 _SLEEP_MS   = round(1000.0 * _BATCH / _DATA_HZ)   # sleep between emits (= 100 ms)
@@ -72,7 +72,7 @@ class SimWorker(QThread):
             a1_arr = np.empty(_BATCH)
             a2_arr = np.empty(_BATCH)
             a3_arr = np.empty(_BATCH)
-            vq_arr = np.empty(_BATCH)
+            u_arr = np.empty(_BATCH)
 
             for b in range(_BATCH):
                 # Record output timestamp before integration substeps
@@ -86,7 +86,7 @@ class SimWorker(QThread):
                 a1_arr[b] = a1
                 a2_arr[b] = a2
                 a3_arr[b] = a3
-                vq_arr[b] = tau
+                u_arr[b] = tau
 
-            self.data_received.emit(t_arr, a1_arr, a2_arr, a3_arr, vq_arr)
+            self.data_received.emit(t_arr, a1_arr, a2_arr, a3_arr, u_arr)
             self.msleep(_SLEEP_MS)

@@ -1,5 +1,5 @@
 """
-gui/bode_widget.py — Bode magnitude (АЧХ) plot for ECP205 torsional plant.
+gui/bode_widget.py — Bode magnitude plot for ECP205 torsional plant.
 
 Transfer functions from ECP Model 205 manual, Appendix A (eqns A.4-6…A.4-12):
 
@@ -82,7 +82,7 @@ class BodeWidget(pg.PlotWidget):
         super().__init__(parent)
 
         self.setBackground("#1e1e1e")
-        self.setTitle("АЧХ")
+        self.setTitle("Frequency Response (Magnitude)")
         self.setLabel("left",   "Magnitude")
         self.setLabel("bottom", "Frequency", units="Hz")
         self.showGrid(x=True, y=True, alpha=0.3)

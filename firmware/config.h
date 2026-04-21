@@ -45,13 +45,28 @@
 #define ENCODER_INVERT_DISK3   false
 
 // --- Motor parameters — *** FILL IN FROM MOTOR SPEC *** ---
-#define MOTOR_POLE_PAIRS   11        // update to actual pole pair count
-#define SUPPLY_VOLTAGE     12.0f    // update to actual supply voltage (V)
-#define MOTOR_VOLTAGE_LIMIT 10.0f   // max |Vq| sent to motor (V)
+#define MOTOR_POLE_PAIRS    11       // update to actual pole pair count
+#define SUPPLY_VOLTAGE      12.0f   // update to actual supply voltage (V)
+#define MOTOR_VOLTAGE_LIMIT 10.0f   // max output Vq from current PI (V) — keep as voltage rail guard
+
+// Motor electrical parameters (required for foc_current mode)
+// PHASE_RESISTANCE: measure phase-to-phase with multimeter, divide by 2
+// MOTOR_KV: from motor datasheet (RPM/V no-load); comment out if unknown
+#define PHASE_RESISTANCE   1.5f     // Ω  *** MEASURE WITH MULTIMETER ***
+#define MOTOR_KV           110      // RPM/V *** FROM MOTOR DATASHEET ***
+
+// ACS711 inline current sense (45 mV/A at 5 V supply)
+// SimpleFOC InlineCurrentSense(shunt_R, gain, phA, phB, phC)
+// Formula: I = V_adc / (shunt_R * gain)  →  shunt_R * gain = 0.045 V/A
+#define CURRENT_SENSE_R    0.045f   // effective Ω encoding sensor sensitivity
+#define CURRENT_SENSE_GAIN 1.0f     // no external amplifier
+
+// Maximum commanded current (replaces voltage limit as excitation cap)
+#define MOTOR_CURRENT_LIMIT 3.0f    // A  — set below motor stall current
 
 // --- Control loop rates ---
 #define FOC_RATE_HZ        1000     // FOC interrupt frequency (Hz)
-#define DATA_RATE_HZ       100       // serial data output rate (Hz)
+#define DATA_RATE_HZ       200       // serial data output rate (Hz)
 
 // --- Serial ---
-#define SERIAL_BAUD        115200
+#define SERIAL_BAUD        500000
